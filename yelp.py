@@ -4,6 +4,7 @@ import numpy as np
 dataset = load_dataset("yelp_review_full")
 import torch
 # tokenizer, model, opter = create_them()
+from sklearn.metrics import precision_recall_fscore_support as score
 
 train = dataset['train']
 test = dataset['test']
@@ -104,27 +105,8 @@ def get_test_result(tokenizer, model):
         results.append(result)
     return results
 
-def cal_prec_rec_f1_v2(results, targets):
-  TP = 0
-  FP = 0
-  FN = 0
-  TN = 0
-  for guess, target in zip(results, targets):
-    if guess == 1:
-      if target == 1:
-        TP += 1
-      elif target == 0:
-        FP += 1
-    elif guess == 0:
-      if target == 1:
-        FN += 1
-      elif target == 0:
-        TN += 1
-  prec = TP / (TP + FP) if (TP + FP) > 0 else 0
-  rec = TP / (TP + FN) if (TP + FN) > 0 else 0
-  f1 = (2 * prec * rec) / (prec + rec) if (prec + rec) != 0 else 0
-  balanced_acc_factor1 = TP / (TP + FN) if (TP + FN) > 0 else 0
-  balanced_acc_factor2 = TN / (FP + TN) if (FP + TN) > 0 else 0
-  balanced_acc = (balanced_acc_factor1 + balanced_acc_factor2) / 2
-  return prec, rec, f1, balanced_acc
 
+def cal_scores():
+    predicted = [1,2,3,4,5,1,2,1,1,4,5] 
+    y_test = [1,2,3,4,5,1,2,1,1,4,1]
+    precision, recall, fscore, support = score(y_test, predicted)
