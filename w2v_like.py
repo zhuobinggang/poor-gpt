@@ -1,9 +1,6 @@
-from transformers import BertTokenizer, BertForMaskedLM
-import torch
+from common_bert import create_them 
 
-tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-model = BertForMaskedLM.from_pretrained("bert-base-uncased")
-opter = torch.optim.AdamW(model.parameters(), 1e-5)
+tokenizer, model, opter = create_them()
 
 def fewshot_dataset():
     inputs = ['man plus power equals [MASK].', 
