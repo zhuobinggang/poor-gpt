@@ -60,5 +60,6 @@ def calculate_result(pred_y, true_y = None):
     prec = precision_score(true_y, pred_y, average='macro')
     rec = recall_score(true_y, pred_y, average='macro')
     print(f'F: {f}, PRECISION: {prec}, RECALL: {rec}')
+    return prec, rec, f
 
 

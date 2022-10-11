@@ -1,6 +1,8 @@
 from common import create_model
-from reader import customized_ds
+from reader import customized_ds, calculate_result
 import torch
+import numpy as np
+from chart import draw_line_chart
 
 def create_model_with_trainable_prefix():
     m = create_model()
@@ -15,6 +17,17 @@ def create_model_with_trainable_prefix():
     m.trainable_prefixs = trainable_prefixs
     m.opter_prefixs = torch.optim.AdamW([trainable_prefixs], 1e-3)
     m.trainable_prefixs_length = trainable_prefixs.shape[1]
+    return m
+
+def create_model_with_trained_prefix():
+    m = create_model()
+    # Initialize prefix embeddings and opter
+    prefix_embs = torch.load('trained_prefix0.tch') # (1, 8 , 768)
+    prefix_embs.requires_grad_(True)
+    # Assign
+    m.trainable_prefixs = prefix_embs
+    m.opter_prefixs = torch.optim.AdamW([prefix_embs], 1e-3)
+    m.trainable_prefixs_length = prefix_embs.shape[1]
     return m
 
 def insert_prefix_and_get_prediction_scores(model_with_trainable_prefix, text):
@@ -71,7 +84,7 @@ def train_one_epoch(m, batch = 8):
     m.opter_prefixs.zero_grad()
     return batch_losses
 
-def predicted_token_to_labels(predicted_tokens):
+def predicted_token_to_labels(predicted_tokens, turn_word_to_zero = False):
     y_pred = []
     for token in predicted_tokens:
         token = token.replace(' ', '')
@@ -80,7 +93,11 @@ def predicted_token_to_labels(predicted_tokens):
         elif token == 'いえ':
             y_pred.append(0)
         else:
-            y_pred.append(token)
+            if turn_word_to_zero:
+                print(f'Turned word {token} to zero!')
+                y_pred.append(0)
+            else:
+                y_pred.append(token)
     return y_pred
 
 def get_predicted_word(m, text):
@@ -146,5 +163,49 @@ def run():
     print(y_pred)
     print(y_true)
 
+
+# ================= Finetune =====================
+
+def continue_train_bert_paramaters_customized_trainds(train_ds, m, batch = 8):
+    train_ds_length = len(train_ds)
+    batch_losses = []
+    batch_loss = 0
+    for index, (text, label) in enumerate(train_ds):
+        loss = cal_loss(m, text, label)
+        loss.backward()
+        batch_loss += loss.item()
+        if (index + 1) % batch == 0:
+            m.opter.step()
+            m.opter.zero_grad()
+            batch_losses.append(batch_loss)
+            batch_loss = 0
+            print(f'{index + 1} / {train_ds_length}')
+    m.opter.step()
+    m.opter.zero_grad()
+    return batch_losses
+
+def get_curve(model_with_trained_prefix):
+    m = model_with_trained_prefix
+    train_ds, _ = customized_ds()
+    fs = []
+    for start in range(0, len(train_ds), 16):
+        end = start + 16
+        _ = continue_train_bert_paramaters_customized_trainds(train_ds[start:end], m, 8)
+        predicted_tokens, y_true = test(m)
+        y_pred = predicted_token_to_labels(predicted_tokens, turn_word_to_zero = True)
+        prec, rec, f = calculate_result(y_pred, y_true)
+        if f > np.max(fs):
+            print(f'new record at {start}: {prec}, {rec}, {f}')
+        fs.append(f)
+    return fs
+
+def continue_train_bert_paramaters(m, batch = 8):
+    train_ds, _ = customized_ds()
+    return continue_train_bert_paramaters_customized_trainds(train_ds)
+
+
+def draw_fss(fss):
+    xs = list(range(len(fss)))
+    draw_line_chart(xs, [fss], ['trined prefix result'])
 
 
