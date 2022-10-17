@@ -27,7 +27,7 @@ def get_inputs_emb_without_pos_info(m, word):
     before_prefix_emb = get_emb_without_position_info_for_concat(m, f'[CLS]「{word}」') # (1, ?, 768)
     prefix_emb = m.trainable_prefixs # (1, 10, 768)
     after_prefix_emb = get_emb_without_position_info_for_concat(m, '[MASK]。[SEP]') # (1, 1, 768)
-    inputs_emb_without_pos_info = torch.cat([before_prefix_emb, prefix_emb, after_prefix_emb, dim = 1)
+    inputs_emb_without_pos_info = torch.cat([before_prefix_emb, prefix_emb, after_prefix_emb], dim = 1)
     # after concat
     mask_index = before_prefix_emb.shape[1] + prefix_emb.shape[1]
     return inputs_emb_without_pos_info, mask_index
@@ -41,11 +41,13 @@ def get_predicted_word(m, text):
 def learning_curve(prompt_tuning_only = True, epochs = 12, batch = 4, lr = 1e-3, prefix_length = 16):
     if prompt_tuning_only:
         m = create_model_with_trainable_prefix(word = '表現', length = prefix_length, learning_rate = lr)
+        m.bert.requires_grad_(False)
         opter = m.opter_prefixs
         path = 'learning_curve_prompt_tuning_only.png'
     else:
-        m = create_model_with_trained_prefix('trained_prefix_len10_epoch10.tch')
+        m = create_model_with_trained_prefix('trained_prefix_len10_epoch12.tch')
         m.trainable_prefixs.requires_grad_(False)
+        m.bert.requires_grad_(True)
         opter = m.opter
         path = 'learning_curve_prompt_tuning_finetune.png'
     train_ds, test_ds = customized_ds()
@@ -64,7 +66,7 @@ def learning_curve(prompt_tuning_only = True, epochs = 12, batch = 4, lr = 1e-3,
     x = list(range(epochs))
     scale_down_batch_losses = [loss / 10 for loss in batch_losses]
     draw_line_chart(x, [scale_down_batch_losses, precs, recs, fs, fake_fs], ['batch loss', 'precs', 'recs', 'fs', 'random fs'], path = path, colors = ['r','g','b','y', 'k'])
-    return [scale_down_batch_losses, precs, recs, fs, fake_fs]
+    return m, [scale_down_batch_losses, precs, recs, fs, fake_fs]
 
 def redraw():
     pass
@@ -75,10 +77,13 @@ def early_stop_5_times(prompt_tuning_only = True, restart = 5, epoch = 10):
     for _ in range(restart):
         if prompt_tuning_only:
             m = create_model_with_trainable_prefix(word = '表現', length = 10, learning_rate = 1e-3)
+            m.trainable_prefixs.requires_grad_(True)
+            m.bert.requires_grad_(False)
             opter = m.opter_prefixs
         else:
-            m = create_model_with_trained_prefix('trained_prefix_len10_epoch10.tch')
+            m = create_model_with_trained_prefix('trained_prefix_len10_epoch12.tch')
             m.trainable_prefixs.requires_grad_(False)
+            m.bert.requires_grad_(True)
             opter = m.opter
         for e in range(epoch):
             _ = train_one_epoch(m, train_ds, cal_loss, opter, batch = 4)
@@ -96,9 +101,10 @@ def train_prefix_and_store():
 
 def train_bert_parameters(m = None):
     if m is None:
-        m = create_model_with_trained_prefix('trained_prefix_len10_epoch10.tch')
+        m = create_model_with_trained_prefix('trained_prefix_len10_epoch12.tch')
     train_ds, test_ds = customized_ds()
     m.trainable_prefixs.requires_grad_(False) # freeze prefix
+    m.bert.requires_grad_(True) 
     losses = train_one_epoch(m, train_ds, cal_loss, m.opter, batch = 4)
     print(f'Trained, mean loss: {np.mean(losses)}')
     res = test(m, test_ds, dry_run)
