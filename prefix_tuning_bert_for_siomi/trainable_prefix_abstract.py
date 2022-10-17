@@ -1,9 +1,10 @@
-# NOTE 通过重写保存的通用代码
 import types
 import torch
 from transformers import BertJapaneseTokenizer, BertForMaskedLM
 from sklearn.metrics import f1_score, precision_score, recall_score
 import numpy as np
+import matplotlib.pyplot as plt
+
 
 def create_model(learning_rate = 1e-5):
     res = types.SimpleNamespace()
@@ -45,7 +46,7 @@ def create_model_with_trained_prefix(path):
     return m
 
 # REUSABLE, 抽象函数
-def train_one_epoch(m, train_ds, cal_loss, opter, batch = 4):
+def train_one_epoch(m, train_ds, cal_loss, opter, batch = 4, log_inteval = 4):
     train_ds_length = len(train_ds)
     batch_losses = []
     batch_loss = 0
@@ -53,15 +54,18 @@ def train_one_epoch(m, train_ds, cal_loss, opter, batch = 4):
         loss = cal_loss(m, item)
         loss.backward()
         batch_loss += loss.item()
+        if (index + 1) % log_inteval == 0:
+            print(f'{index + 1} / {train_ds_length}')
         if (index + 1) % batch == 0:
             opter.step()
             opter.zero_grad()
+            m.bert.zero_grad()
             batch_loss = batch_loss / batch # Mean
             batch_losses.append(batch_loss)
             batch_loss = 0
-            print(f'{index + 1} / {train_ds_length}')
     opter.step()
     opter.zero_grad()
+    m.bert.zero_grad()
     return batch_losses
 
 # REUSABLE, 抽象函数
@@ -99,3 +103,52 @@ def calculate_result(pred_y, true_y):
     print(f'F: {f}, PRECISION: {prec}, RECALL: {rec}')
     return prec, rec, f
 
+
+# ============= SET ==================
+# NOTE: 关于这部分代码谷歌 Huggingface BertEmbeddings Source Code
+def get_emb_without_position_info_for_concat(m, s):
+    ids = m.toker.encode(s, add_special_tokens = False)
+    ids = torch.LongTensor([ids]).cuda()
+    emb_without_position_info = m.bert.bert.embeddings.word_embeddings(ids)
+    return emb_without_position_info
+
+def embedding_with_position_info(m, emb_without_position_info):
+    return m.bert.bert.embeddings(inputs_embeds = emb_without_position_info)
+
+def bert_encoder(m, emb_with_position_info):
+    return m.bert.bert.encoder(emb_with_position_info)
+
+def predict_by_emb_without_position_info(m, inputs_emb, mask_index):
+    inputs_emb_with_position_info = embedding_with_position_info(m, inputs_emb)
+    encoder_outputs = bert_encoder(m, inputs_emb_with_position_info)
+    sequence_output = encoder_outputs[0]
+    prediction_scores = m.bert.cls(sequence_output) # (1, total_length, 32000)
+    predicted_token_id = prediction_scores[0, mask_index].argmax().item()
+    return m.toker.decode(predicted_token_id)
+
+def loss_by_emb_without_position_info(m, inputs_emb, mask_index, label, positive_token = 'はい', negative_token = 'いえ'):
+    inputs_emb_with_position_info = embedding_with_position_info(m, inputs_emb)
+    encoder_outputs = bert_encoder(m, inputs_emb_with_position_info)
+    sequence_output = encoder_outputs[0]
+    prediction_scores = m.bert.cls(sequence_output) # (1, total_length, 32000)
+    # cal loss
+    total_length = prediction_scores.shape[1]
+    labels = [-100] * total_length
+    target_label_word = positive_token if label == 1 else negative_token
+    target_token_id = m.toker.encode(target_label_word, add_special_tokens = False)[0]
+    labels[mask_index] = target_token_id
+    labels = torch.LongTensor(labels).cuda()
+    loss_fct = torch.nn.CrossEntropyLoss()
+    masked_lm_loss = loss_fct(prediction_scores.view(-1, m.bert.config.vocab_size), labels.view(-1))
+    return masked_lm_loss
+# ============= END SET ==================
+
+def draw_line_chart(x, ys, legends, path = 'dd.png', colors = None):
+    plt.clf()
+    for i, (y, l) in enumerate(zip(ys, legends)):
+        if colors is not None:
+            plt.plot(x[:len(y)], y, label = l, color = colors[i])
+        else:
+            plt.plot(x[:len(y)], y, label = l)
+    plt.legend()
+    plt.savefig(path)
