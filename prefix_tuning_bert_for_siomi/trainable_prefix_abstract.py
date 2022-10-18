@@ -96,12 +96,37 @@ def dry_run(m, item):
     return pred, true
 
 # REUSABLE
-def calculate_result(pred_y, true_y):
-    f = f1_score(true_y, pred_y, average='macro')
-    prec = precision_score(true_y, pred_y, average='macro')
-    rec = recall_score(true_y, pred_y, average='macro')
-    print(f'F: {f}, PRECISION: {prec}, RECALL: {rec}')
-    return prec, rec, f
+# def calculate_result(pred_y, true_y):
+#     f = f1_score(true_y, pred_y, average='macro')
+#     prec = precision_score(true_y, pred_y, average='macro')
+#     rec = recall_score(true_y, pred_y, average='macro')
+#     print(f'F: {f}, PRECISION: {prec}, RECALL: {rec}')
+#     return prec, rec, f
+
+def calculate_result(results, targets):
+  TP = 0
+  FP = 0
+  FN = 0
+  TN = 0
+  for guess, target in zip(results, targets):
+    if guess == 1:
+      if target == 1:
+        TP += 1
+      elif target == 0:
+        FP += 1
+    elif guess == 0:
+      if target == 1:
+        FN += 1
+      elif target == 0:
+        TN += 1
+  prec = TP / (TP + FP) if (TP + FP) > 0 else 0
+  rec = TP / (TP + FN) if (TP + FN) > 0 else 0
+  f1 = (2 * prec * rec) / (prec + rec) if (prec + rec) != 0 else 0
+  balanced_acc_factor1 = TP / (TP + FN) if (TP + FN) > 0 else 0
+  balanced_acc_factor2 = TN / (FP + TN) if (FP + TN) > 0 else 0
+  balanced_acc = (balanced_acc_factor1 + balanced_acc_factor2) / 2
+  print(f'F: {f1}, PRECISION: {prec}, RECALL: {rec}')
+  return prec, rec, f1
 
 
 # ============= SET ==================
