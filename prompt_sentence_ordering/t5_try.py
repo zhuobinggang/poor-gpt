@@ -8,7 +8,7 @@ import numpy as np
 import time
 
 
-def create_model(learning_rate = 3e-4):
+def create_model(learning_rate = 2e-5):
     res = types.SimpleNamespace()
     # NOTE
     # res.t5 = T5ForConditionalGeneration.from_pretrained("google/flan-t5-small")
