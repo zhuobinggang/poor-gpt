@@ -24,7 +24,8 @@ def prepared_ds(ds):
     res = []
     prefix = 'sentence ordering: '
     for ss, ls in ds:
-        input_text = prefix + ''.join([f'<extra_id_{index}>. {s} ' for index, s in enumerate(ss)])
+        # input_text = prefix + ''.join([f'<extra_id_{index}>. {s} ' for index, s in enumerate(ss)])
+        input_text = prefix + ''.join([f'(<extra_id_{index}>) {s} ' for index, s in enumerate(ss)])
         label_text = ''.join([f'<extra_id_{index}> {l} ' for index, l in enumerate(ls)])
         label_text += f'<extra_id_{len(ls)}>'
         res.append((input_text, label_text))
