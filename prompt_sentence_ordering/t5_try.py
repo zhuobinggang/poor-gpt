@@ -1,5 +1,5 @@
 import types
-from transformers import AutoTokenizer, T5ForConditionalGeneration
+from transformers import T5Tokenizer, T5ForConditionalGeneration
 from reader import read_data_full
 import torch
 import scipy.stats as stats
