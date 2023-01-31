@@ -53,8 +53,11 @@ def test(m, test_ds):
         input_ids = m.toker(input_text, return_tensors="pt").input_ids.cuda()
         outputs = m.t5.generate(input_ids)
         label_text = m.toker.decode(outputs[0], skip_special_tokens=True)
-        y_pred = [int(item) for item in label_text.split()]
-        y_preds_y_trues.append((y_pred, y_true))
+        try:
+            y_pred = [int(item) for item in label_text.split()]
+            y_preds_y_trues.append((y_pred, y_true))
+        except ValueError as ve:
+            print(f'ValueError: {label_text.split()}')
     return score_method([y_pred for y_pred, y_true in y_preds_y_trues], [y_true for y_pred, y_true in y_preds_y_trues])
 
     
