@@ -31,11 +31,11 @@ def prepared_ds(ds):
         res.append((input_text, label_text))
     return res
 
-def train(m, train_ds):
+def train(m, train_ds, logging = True):
     # train
     train_ds_processed = prepared_ds(train_ds)
     for index, (input_text, label_text) in enumerate(train_ds_processed):
-        if (index + 1) % 500 == 0:
+        if logging and (index + 1) % 500 == 0:
             print(f'{index + 1} / {len(train_ds)}')
         input_ids = m.toker(input_text, return_tensors="pt").input_ids.cuda()
         labels = m.toker(label_text, return_tensors="pt").input_ids.cuda()
