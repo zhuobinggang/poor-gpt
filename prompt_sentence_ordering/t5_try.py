@@ -11,10 +11,10 @@ import time
 def create_model(learning_rate = 2e-5):
     res = types.SimpleNamespace()
     # NOTE
-    # res.t5 = T5ForConditionalGeneration.from_pretrained("google/flan-t5-small")
-    # res.toker = AutoTokenizer.from_pretrained("google/flan-t5-small")
-    res.t5 = T5ForConditionalGeneration.from_pretrained("google/flan-t5-base")
-    res.toker = T5Tokenizer.from_pretrained("google/flan-t5-base")
+    res.t5 = T5ForConditionalGeneration.from_pretrained("google/flan-t5-small")
+    res.toker = AutoTokenizer.from_pretrained("google/flan-t5-small")
+    # res.t5 = T5ForConditionalGeneration.from_pretrained("google/flan-t5-base")
+    # res.toker = T5Tokenizer.from_pretrained("google/flan-t5-base")
     res.opter = torch.optim.AdamW(res.t5.parameters(), learning_rate)
     res.t5.cuda()
     res.t5.train()
@@ -81,14 +81,18 @@ def score_method(y_preds, y_trues):
 
 
 def small_script():
+    logs = []
     start_time = time.time()
     m = create_model()
     train_ds, test_ds = read_data_full()
-    for start in [0, 5000, 10000, 15000, 20000, 25000, 30000, 35000]:
-        train(m, train_ds[start: start + 5000])
-        print(test(m, test_ds[:1000]))
+    for i in range(6):
+        for start in [0, 5000, 10000, 15000, 20000, 25000, 30000, 35000]:
+            train(m, train_ds[start: start + 5000])
+            tau = test(m, test_ds)
+            logs.append(tau)
+            print(tau)
     print("--- %s seconds ---" % (time.time() - start_time))
-    return m
+    return m, logs
 
 
         
