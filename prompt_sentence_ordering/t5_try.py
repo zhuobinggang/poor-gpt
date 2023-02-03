@@ -85,7 +85,7 @@ def small_script():
     start_time = time.time()
     m = create_model()
     train_ds, test_ds = read_data_full()
-    for i in range(6):
+    for i in range(4):
         for start in [0, 5000, 10000, 15000, 20000, 25000, 30000, 35000]:
             train(m, train_ds[start: start + 5000])
             tau = test(m, test_ds)
