@@ -12,7 +12,7 @@ def create_model(learning_rate = 2e-5):
     res = types.SimpleNamespace()
     # NOTE
     res.t5 = T5ForConditionalGeneration.from_pretrained("google/flan-t5-small")
-    res.toker = T5ForConditionalGeneration.from_pretrained("google/flan-t5-small")
+    res.toker = T5Tokenizer.from_pretrained("google/flan-t5-small")
     # res.t5 = T5ForConditionalGeneration.from_pretrained("google/flan-t5-base")
     # res.toker = T5Tokenizer.from_pretrained("google/flan-t5-base")
     res.opter = torch.optim.AdamW(res.t5.parameters(), learning_rate)
