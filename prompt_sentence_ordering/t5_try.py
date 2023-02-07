@@ -8,11 +8,13 @@ import numpy as np
 import time
 
 
-def create_model(learning_rate = 2e-5):
+def create_model(learning_rate = 2e-5, size = 'small'):
     res = types.SimpleNamespace()
     # NOTE
-    res.t5 = T5ForConditionalGeneration.from_pretrained("google/flan-t5-small")
-    res.toker = T5Tokenizer.from_pretrained("google/flan-t5-small")
+    # res.t5 = T5ForConditionalGeneration.from_pretrained("google/flan-t5-small")
+    # res.toker = T5Tokenizer.from_pretrained("google/flan-t5-small")
+    res.t5 = T5ForConditionalGeneration.from_pretrained(f"google/flan-t5-{size}")
+    res.toker = T5Tokenizer.from_pretrained(f"google/flan-t5-{size}")
     # res.t5 = T5ForConditionalGeneration.from_pretrained("google/flan-t5-base")
     # res.toker = T5Tokenizer.from_pretrained("google/flan-t5-base")
     res.opter = torch.optim.AdamW(res.t5.parameters(), learning_rate)

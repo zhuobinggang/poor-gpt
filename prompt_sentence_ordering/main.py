@@ -122,3 +122,10 @@ def learning_curve_full(epochs = 6, batch = 16):
     scale_down_batch_losses = [loss / 10 for loss in batch_losses]
     draw_line_chart(x, [taus, fake_taus], ['batch loss', 'tau', 'baseline tau'], path = path, colors = ['r','g','k'])
     return m, [scale_down_batch_losses, taus, fake_taus]
+
+# ===================== 2023.2.7 =====================
+# 尝试用SIND数据集来提取人物间关系
+
+def dataset_item_to_story(item):
+    return ' '.join([x[0] for x in sorted(zip(item[0],item[1]), key = lambda x: x[1])])
+
