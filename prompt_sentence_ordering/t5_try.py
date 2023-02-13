@@ -98,3 +98,18 @@ def small_script():
 
 
         
+# ===================== 2023.2.7 =====================
+# 尝试用SIND数据集来提取人物间关系
+
+def dataset_item_to_story(item):
+    return ' '.join([x[0] for x in sorted(zip(item[0],item[1]), key = lambda x: x[1])])
+
+def story_to_input(story, question):
+    return f'question: {question} context: {story}'
+
+def generate_output(m, input_text):
+    input_ids = m.toker(input_text, return_tensors="pt").input_ids.cuda()
+    outputs = m.t5.generate(input_ids)
+    return m.toker.decode(outputs[0])
+
+
