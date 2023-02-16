@@ -93,3 +93,14 @@ def small_script(m, epoch):
     for i in range(epoch):
         train(m, dataset['train_annotated'])
     print("--- %s seconds ---" % (time.time() - start_time))
+
+def generate(m, dstest, idx):
+    input_nec, output_nec = name_entity_clustering_inout(dstest[idx])
+    input_ids = m.toker(input_nec, return_tensors="pt").input_ids.cuda()
+    outputs = m.t5.generate(input_ids)
+    label_text = m.toker.decode(outputs[0], skip_special_tokens=True)
+    return label_text
+
+
+
+
