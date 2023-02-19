@@ -111,11 +111,11 @@ def output_text_process_step_by_step(context_words, step_output_text, mark, clus
                 cluster_idx = int(target.strip('['))
                 set_or_create(mark, start, 'prefix', f'[{cluster_idx}')
                 set_or_create(mark, end-1, 'suffix', f']')
-                print(f'OUTPUT_PROCESS(APPEND): {words} ## {suffix}, 标记 {context_words[start]} ~ {context_words[end-1]} ')
+                # print(f'OUTPUT_PROCESS(APPEND): {words} ## {suffix}, 标记 {context_words[start]} ~ {context_words[end-1]} ')
         else: # LINK, 需要同时给过去和现在的token增加标记
             # print('LINK')
             should_increase_cluster_idx = True
-            print(f'OUTPUT_PROCESS(LINK): and cluster index increased, now = {cluster_idx + 1}')
+            # print(f'OUTPUT_PROCESS(LINK): and cluster index increased, now = {cluster_idx + 1}')
             # current
             words, suffix = split_and_trim(current, '##')
             words = words.split()
@@ -128,7 +128,7 @@ def output_text_process_step_by_step(context_words, step_output_text, mark, clus
                 end -= len(suffix)
                 set_or_create(mark, start, 'prefix', f'[{cluster_idx + 1}')
                 set_or_create(mark, end-1, 'suffix', f']')
-                print(f'(LINK BASE): {words} ## {suffix}, 标记 {context_words[start]} ~ {context_words[end-1]} ')
+                # print(f'(LINK BASE): {words} ## {suffix}, 标记 {context_words[start]} ~ {context_words[end-1]} ')
             # target
             words, suffix = split_and_trim(target, '##')
             words = words.split()
@@ -141,7 +141,7 @@ def output_text_process_step_by_step(context_words, step_output_text, mark, clus
                 end -= len(suffix)
                 set_or_create(mark, start, 'prefix', f'[{cluster_idx + 1}')
                 set_or_create(mark, end-1, 'suffix', f']')
-                print(f'(LINK TARGET): {words} ## {suffix}, 标记 {context_words[start]} ~ {context_words[end-1]} ')
+                # print(f'(LINK TARGET): {words} ## {suffix}, 标记 {context_words[start]} ~ {context_words[end-1]} ')
                 # print(f'LINK_target: {words + suffix} = {context_words[start]} ~ {context_words[end-1]} ')
                 # print(mark)
     return should_increase_cluster_idx
@@ -154,12 +154,10 @@ def process_training_data(document):
     context_words = [] # 就是s.words摊开，包含当前处理的句子单词
     cluster_idx_increase = 0 # 因为根据ouput来处理的时候cluster_idx是顺序递增的，跟cid不同
     mark = {} # (prefix, suffix) # {token_id: {prefix, suffix}}
-    final_outputs = []
     for s in document:
         # 将说话人添加到mark[idx]
         set_or_create(mark, len(context_words), 'speaker', s.speakers[0])
         context_words += s.words
-        output_texts = [] # 处理当前句子时模型给出的output，最后通过分隔符连接
         # NOTE: Sort as paper: Coreference Resolution through a seq2seq Transition-Based System
         for cid, (start, end) in list(sorted(s.coref_spans.copy(), key = lambda item: item[1][1])):
             current_item_text = ' '.join(s.words[start:end+1]) # OK
@@ -171,27 +169,29 @@ def process_training_data(document):
                 if len(cluster_dic[cid]) == 1: # LINK
                     # TODO: 确保cluster_idx_increase += 1
                     _, previou_item_text, previou_item_three_gram_suffix = cluster_dic[cid][0]
+                    input_text = compress_context_words_and_marks(context_words, mark) # 单个句子里面可能会多次更新mark，造成input_text的变更。这说明input_output是对应于command而非句子的
                     output_text = f'{current_item_text} ## {current_item_three_gram_suffix} -> {previou_item_text} ## {previou_item_three_gram_suffix}'
+                    input_outputs.append((input_text, output_text))
                     should_increase = output_text_process_step_by_step(context_words, output_text, mark, cluster_idx_increase)
                     assert should_increase is True
                     if should_increase:
                         cluster_idx_increase += 1
-                    output_texts.append(output_text)
                     cluster_dic[cid].append((cid, current_item_text, current_item_three_gram_suffix))
                 else: # Append
+                    input_text = compress_context_words_and_marks(context_words, mark) # 单个句子里面可能会多次更新mark，造成input_text的变更。这说明input_output是对应于command而非句子的
                     output_text = f'{current_item_text} ## {current_item_three_gram_suffix} -> [{cluster_idx_increase}'
+                    input_outputs.append((input_text, output_text))
                     should_increase = output_text_process_step_by_step(context_words, output_text, mark, cluster_idx_increase)
                     assert should_increase is False
                     if should_increase:
                         cluster_idx_increase += 1
-                    output_texts.append(output_text)
                     cluster_dic[cid].append((cid, current_item_text, current_item_three_gram_suffix))
         # SHIFT
-        output_texts.append('SHIFT')
+        input_text = compress_context_words_and_marks(context_words, mark) # 单个句子里面可能会多次更新mark，造成input_text的变更。这说明input_output是对应于command而非句子的
+        output_text = 'SHIFT'
+        input_outputs.append((input_text, output_text))
         # combine output text
-        output_text = ' ; '.join(output_texts)
-        final_outputs.append(output_text)
-    return final_outputs, context_words, mark
+    return input_outputs
 
 
 def compress_context_words_and_marks(context_words, mark):
