@@ -27,10 +27,14 @@ dspath = {
         'dev': '/usr01/taku/datasets/conll_eng_v4/dev.english.v4_gold_conll'
 }
 
-def load_ds():
+def load_ds(load_train = True):
     loader = Ontonotes()
-    train = list(loader.dataset_document_iterator(dspath['train']))
-    test = list(loader.dataset_document_iterator(dspath['test']))
+    if load_train:
+        train = list(loader.dataset_document_iterator(dspath['train']))
+        test = list(loader.dataset_document_iterator(dspath['test']))
+    else:
+        train = None
+        test = list(loader.dataset_document_iterator(dspath['test']))
     return train, test
 
 def transform_document(item):
@@ -42,12 +46,13 @@ def transform_document(item):
 
 def show_document_with_coref_clustering(item):
     text = ''
-    for s in doc: 
+    for s in item: 
         words = s.words.copy()
         for mention in s.coref_spans:
             cluster_id, (start, end) = mention
             words[start] = f'[{cluster_id} {words[start]}'
             words[end] = f'{words[end]}]'
+        print(s.speakers[0] + ': ' + ' '.join(words) + ' ')
         text += (s.speakers[0] + ': ' + ' '.join(words) + ' ')
     return text
 
@@ -65,51 +70,140 @@ def find_in_clusters(cid, clusters):
             break
     return res_idx
 
-def sentence_process(s, clusters):
-    input_text = ''
-    output_texts = []
-    words = s.words
-    coref_clusters = s.coref_spans.copy()
-    # NOTE: Sort as paper: Coreference Resolution through a seq2seq Transition-Based System
-    coref_clusters_sorted = list(sorted(coref_clusters, key = lambda item: item[1][1]))
-    for cid, (start, end) in coref_clusters_sorted:
-        cluster_idx = find_in_clusters(cid, clusters) # 我们自己的id, 按照顺序递增
-        ###
-        current_item_text = ' '.join(words[start:end+1])
-        current_item_three_gram_suffix = ' '.join(words[end+1:end+4])
-        if cluster_idx is not None:
-            cluster = clusters[cluster_idx]
-            if len(cluster) == 1 : # LINK
-                _, previou_item_text, previou_item_three_gram_suffix = cluster[0]
-                output_text = f'{current_item_text} ## {current_item_three_gram_suffix} -> {previou_item_text} ## {previou_item_three_gram_suffix}'
-                output_texts.append(output_text)
-                # 添加到cluster
-                cluster.append((cid, current_item_text, current_item_three_gram_suffix))
-            else: # APPEND
-                output_text = f'{current_item_text} ## {current_item_three_gram_suffix} -> [{cluster_idx}'
-                output_texts.append(output_text)
-                cluster.append((cid, current_item_text, current_item_three_gram_suffix))
-        else: # 之前并不存在相同cluster，创建cluster
-            clusters.append([(cid, current_item_text, current_item_three_gram_suffix)])
-    # SHIFT
-    output_texts.append('SHIFT')
-    # combine output text
-    output_text = ' ; '.join(output_texts)
-    return output_text
+def split_and_trim(text, mark):
+    return [term for term in [s.strip() for s in text.split(mark)] if term != '']
+
+
+def contains(big, small):
+    for i in reversed(range(len(big)-len(small)+1)): #NOTE: From end to start
+        for j in range(len(small)):
+            if big[i+j] != small[j]:
+                break
+        else:
+            return i, i+len(small)
+    return None
+
+def set_or_create(dic, key, key2, value):
+    # print(f'{idx} {prefix} {suffix}')
+    if key not in dic:
+        dic[key] = {}
+    dic[key][key2] = value
+
+
+# NOTE: 唯一改变的是mark
+def output_text_process_step_by_step(context_words, step_output_text, mark, cluster_idx):
+    should_increase_cluster_idx = False
+    step = step_output_text
+    if step == 'SHIFT':
+        print(f'OUTPUT_PROCESS(SHIFT)')
+    else:
+        current, target = split_and_trim(step, '->')
+        if target.startswith('['): # Append, 只需要给当前注目的tokens增加标记
+            words, suffix = split_and_trim(current, '##')
+            words = words.split()
+            suffix = suffix.split()
+            find_myself = contains(context_words, words + suffix) # 在context_words中找到自己的位置，用于标记。比较tricky因为需要解码模型的文字输出
+            if find_myself is None:
+                print(f'Wrong! Can not find current words from context! \n {words + suffix}')
+            else:
+                start, end = find_myself
+                end -= len(suffix)
+                cluster_idx = int(target.strip('['))
+                set_or_create(mark, start, 'prefix', f'[{cluster_idx}')
+                set_or_create(mark, end-1, 'suffix', f']')
+                print(f'OUTPUT_PROCESS(APPEND): {words} ## {suffix}, 标记 {context_words[start]} ~ {context_words[end-1]} ')
+        else: # LINK, 需要同时给过去和现在的token增加标记
+            # print('LINK')
+            should_increase_cluster_idx = True
+            print(f'OUTPUT_PROCESS(LINK): and cluster index increased, now = {cluster_idx + 1}')
+            # current
+            words, suffix = split_and_trim(current, '##')
+            words = words.split()
+            suffix = suffix.split()
+            find_myself = contains(context_words, words + suffix)
+            if find_myself is None:
+                print(f'Wrong! Can not find current words from context! \n {words + suffix}')
+            else:
+                start, end = find_myself
+                end -= len(suffix)
+                set_or_create(mark, start, 'prefix', f'[{cluster_idx + 1}')
+                set_or_create(mark, end-1, 'suffix', f']')
+                print(f'(LINK BASE): {words} ## {suffix}, 标记 {context_words[start]} ~ {context_words[end-1]} ')
+            # target
+            words, suffix = split_and_trim(target, '##')
+            words = words.split()
+            suffix = suffix.split()
+            find_myself = contains(context_words, words + suffix)
+            if find_myself is None:
+                print(f'Wrong! Can not find target words from context! \n {words + suffix}')
+            else:
+                start, end = find_myself
+                end -= len(suffix)
+                set_or_create(mark, start, 'prefix', f'[{cluster_idx + 1}')
+                set_or_create(mark, end-1, 'suffix', f']')
+                print(f'(LINK TARGET): {words} ## {suffix}, 标记 {context_words[start]} ~ {context_words[end-1]} ')
+                # print(f'LINK_target: {words + suffix} = {context_words[start]} ~ {context_words[end-1]} ')
+                # print(mark)
+    return should_increase_cluster_idx
     
 # Prepare for the training set
 def process_training_data(document):
-    clusters = []
-    history_context = ''
-    input_outputs = []
+    cluster_dic = {} # 每次mention创建一个位置，key=cid
+    # clusters = [] # 根据模型输出创建和更新的clusters，每次LINK更新下标
+    input_outputs = [] # 训练用
+    context_words = [] # 就是s.words摊开，包含当前处理的句子单词
+    cluster_idx_increase = 0 # 因为根据ouput来处理的时候cluster_idx是顺序递增的，跟cid不同
+    mark = {} # (prefix, suffix) # {token_id: {prefix, suffix}}
+    final_outputs = []
     for s in document:
-        output_text = sentence_process(s, clusters)
-        input_outputs.append((None, output_text))
-    return clusters, input_outputs
+        # 将说话人添加到mark[idx]
+        set_or_create(mark, len(context_words), 'speaker', s.speakers[0])
+        context_words += s.words
+        output_texts = [] # 处理当前句子时模型给出的output，最后通过分隔符连接
+        # NOTE: Sort as paper: Coreference Resolution through a seq2seq Transition-Based System
+        for cid, (start, end) in list(sorted(s.coref_spans.copy(), key = lambda item: item[1][1])):
+            current_item_text = ' '.join(s.words[start:end+1]) # OK
+            current_item_three_gram_suffix = ' '.join(s.words[end+1:end+4]) # OK
+            if cid not in cluster_dic: # Mention
+                cluster_dic[cid] = [(cid, current_item_text, current_item_three_gram_suffix)]
+                # print(f'MENTION, cluster_idx_increase: {cluster_idx_increase}, OUTPUT: {output_text}')
+            else: # Link or Append
+                if len(cluster_dic[cid]) == 1: # LINK
+                    # TODO: 确保cluster_idx_increase += 1
+                    _, previou_item_text, previou_item_three_gram_suffix = cluster_dic[cid][0]
+                    output_text = f'{current_item_text} ## {current_item_three_gram_suffix} -> {previou_item_text} ## {previou_item_three_gram_suffix}'
+                    should_increase = output_text_process_step_by_step(context_words, output_text, mark, cluster_idx_increase)
+                    assert should_increase is True
+                    if should_increase:
+                        cluster_idx_increase += 1
+                    output_texts.append(output_text)
+                    cluster_dic[cid].append((cid, current_item_text, current_item_three_gram_suffix))
+                else: # Append
+                    output_text = f'{current_item_text} ## {current_item_three_gram_suffix} -> [{cluster_idx_increase}'
+                    should_increase = output_text_process_step_by_step(context_words, output_text, mark, cluster_idx_increase)
+                    assert should_increase is False
+                    if should_increase:
+                        cluster_idx_increase += 1
+                    output_texts.append(output_text)
+                    cluster_dic[cid].append((cid, current_item_text, current_item_three_gram_suffix))
+        # SHIFT
+        output_texts.append('SHIFT')
+        # combine output text
+        output_text = ' ; '.join(output_texts)
+        final_outputs.append(output_text)
+    return final_outputs, context_words, mark
 
 
-
-
-
-
+def compress_context_words_and_marks(context_words, mark):
+    text = ''
+    for idx, word in enumerate(context_words):
+        if idx in mark:
+            item = mark[idx]
+            prefix = item['prefix'] + ' ' if 'prefix' in item else ''
+            suffix = item['suffix'] if 'suffix' in item else ''
+            speaker = item['speaker'] + ': ' if 'speaker' in item else ''
+            text += f' {speaker}{prefix}{word}{suffix}'
+        else:
+            text += f' {word}'
+    return text
 
