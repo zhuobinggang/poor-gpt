@@ -13,7 +13,7 @@ def create_model(learning_rate = 2e-5, size = 'small'):
     # res.t5 = T5ForConditionalGeneration.from_pretrained("google/flan-t5-small")
     # res.toker = T5Tokenizer.from_pretrained("google/flan-t5-small")
     res.t5 = T5ForConditionalGeneration.from_pretrained(f"google/flan-t5-{size}")
-    res.toker = T5Tokenizer.from_pretrained(f"google/flan-t5-{size}")
+    res.toker = T5Tokenizer.from_pretrained(f"google/flan-t5-{size}", truncation_side= 'left')
     # res.t5 = T5ForConditionalGeneration.from_pretrained("google/flan-t5-base")
     # res.toker = T5Tokenizer.from_pretrained("google/flan-t5-base")
     res.opter = torch.optim.AdamW(res.t5.parameters(), learning_rate)
@@ -71,7 +71,10 @@ def find_in_clusters(cid, clusters):
     return res_idx
 
 def split_and_trim(text, mark):
-    return [term for term in [s.strip() for s in text.split(mark)] if term != '']
+    lst = [term for term in [s.strip() for s in text.split(mark)] if term != '']
+    term = lst[0]
+    suffix = lst[1] if len(lst) >1 else ''
+    return term, suffix
 
 
 def contains(big, small):
@@ -146,15 +149,18 @@ def output_text_process_step_by_step(context_words, step_output_text, mark, clus
                 # print(mark)
     return should_increase_cluster_idx
     
+s_wrong = None
+
 # Prepare for the training set
 def process_training_data(document):
+    global s_wrong
     cluster_dic = {} # 每次mention创建一个位置，key=cid
     # clusters = [] # 根据模型输出创建和更新的clusters，每次LINK更新下标
     input_outputs = [] # 训练用
     context_words = [] # 就是s.words摊开，包含当前处理的句子单词
     cluster_idx_increase = 0 # 因为根据ouput来处理的时候cluster_idx是顺序递增的，跟cid不同
     mark = {} # (prefix, suffix) # {token_id: {prefix, suffix}}
-    for s in document:
+    for idx, s in enumerate(document):
         # 将说话人添加到mark[idx]
         set_or_create(mark, len(context_words), 'speaker', s.speakers[0])
         context_words += s.words
@@ -172,7 +178,12 @@ def process_training_data(document):
                     input_text = compress_context_words_and_marks(context_words, mark) # 单个句子里面可能会多次更新mark，造成input_text的变更。这说明input_output是对应于command而非句子的
                     output_text = f'{current_item_text} ## {current_item_three_gram_suffix} -> {previou_item_text} ## {previou_item_three_gram_suffix}'
                     input_outputs.append((input_text, output_text))
-                    should_increase = output_text_process_step_by_step(context_words, output_text, mark, cluster_idx_increase)
+                    try:
+                        should_increase = output_text_process_step_by_step(context_words, output_text, mark, cluster_idx_increase)
+                    except ValueError as e:
+                        s_wrong = s
+                        print(f'{idx}: {output_text}')
+                        raise e
                     assert should_increase is True
                     if should_increase:
                         cluster_idx_increase += 1
@@ -181,7 +192,12 @@ def process_training_data(document):
                     input_text = compress_context_words_and_marks(context_words, mark) # 单个句子里面可能会多次更新mark，造成input_text的变更。这说明input_output是对应于command而非句子的
                     output_text = f'{current_item_text} ## {current_item_three_gram_suffix} -> [{cluster_idx_increase}'
                     input_outputs.append((input_text, output_text))
-                    should_increase = output_text_process_step_by_step(context_words, output_text, mark, cluster_idx_increase)
+                    try:
+                        should_increase = output_text_process_step_by_step(context_words, output_text, mark, cluster_idx_increase)
+                    except ValueError as e:
+                        s_wrong = s
+                        print(f'{idx}: {output_text}')
+                        raise e
                     assert should_increase is False
                     if should_increase:
                         cluster_idx_increase += 1
@@ -206,4 +222,45 @@ def compress_context_words_and_marks(context_words, mark):
         else:
             text += f' {word}'
     return text
+
+def train(m, ds):
+    for doc in ds:
+        input_outputs = process_training_data(doc)
+        for input_text, label_text in input_outputs:
+            input_ids = m.toker(input_text, return_tensors="pt", truncation = True).input_ids.cuda()
+            labels = m.toker(label_text, return_tensors="pt").input_ids.cuda()
+            loss = m.t5(input_ids=input_ids, labels=labels).loss
+            loss.backward()
+            m.opter.step()
+            m.opter.zero_grad()
+            m.t5.zero_grad()
+
+doc_wrong = None
+
+# m = create_model(learning_rate = 2e-5, size = 'small')
+
+def script(m):
+    global doc_wrong
+    start_time = time.time()
+    ds0, ds1 = load_ds()
+    for idx, doc in enumerate(ds0):
+        if (idx + 1) % 500 == 0: # Log
+            print(f'{idx} / {len(ds0)}')
+        try: 
+            input_outputs = process_training_data(doc)
+        except ValueError as e:
+            print(idx)
+            doc_wrong = doc
+            raise e
+        for input_text, label_text in input_outputs:
+            input_ids = m.toker(input_text, return_tensors="pt", truncation = True).input_ids.cuda()
+            labels = m.toker(label_text, return_tensors="pt").input_ids.cuda()
+            loss = m.t5(input_ids=input_ids, labels=labels).loss
+            loss.backward()
+            m.opter.step()
+            m.opter.zero_grad()
+            m.t5.zero_grad()
+    print("--- %s seconds ---" % (time.time() - start_time))
+    return m
+
 
