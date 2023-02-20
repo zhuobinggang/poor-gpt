@@ -162,7 +162,8 @@ def process_training_data(document):
     mark = {} # (prefix, suffix) # {token_id: {prefix, suffix}}
     for idx, s in enumerate(document):
         # 将说话人添加到mark[idx]
-        set_or_create(mark, len(context_words), 'speaker', s.speakers[0])
+        if s.speakers[0] is not None:
+            set_or_create(mark, len(context_words), 'speaker', s.speakers[0])
         context_words += s.words
         # NOTE: Sort as paper: Coreference Resolution through a seq2seq Transition-Based System
         for cid, (start, end) in list(sorted(s.coref_spans.copy(), key = lambda item: item[1][1])):
@@ -215,9 +216,15 @@ def compress_context_words_and_marks(context_words, mark):
     for idx, word in enumerate(context_words):
         if idx in mark:
             item = mark[idx]
-            prefix = item['prefix'] + ' ' if 'prefix' in item else ''
+            prefix = (item['prefix'] + ' ') if 'prefix' in item else ''
             suffix = item['suffix'] if 'suffix' in item else ''
-            speaker = item['speaker'] + ': ' if 'speaker' in item else ''
+            try:
+                speaker = (item['speaker'] + ': ') if 'speaker' in item else ''
+            except TypeError as e:
+                print(idx)
+                print(context_words)
+                print(mark)
+                raise e
             text += f' {speaker}{prefix}{word}{suffix}'
         else:
             text += f' {word}'
