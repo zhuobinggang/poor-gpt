@@ -7,13 +7,13 @@ import types
 from conll2012_ontonotesv5 import Ontonotes
 
 
-def create_model(learning_rate = 2e-5, size = 'small'):
+def create_model(learning_rate = 2e-5, size = 'small', max_token_size = 512):
     res = types.SimpleNamespace()
     # NOTE
     # res.t5 = T5ForConditionalGeneration.from_pretrained("google/flan-t5-small")
     # res.toker = T5Tokenizer.from_pretrained("google/flan-t5-small")
     res.t5 = T5ForConditionalGeneration.from_pretrained(f"google/flan-t5-{size}")
-    res.toker = T5Tokenizer.from_pretrained(f"google/flan-t5-{size}", truncation_side= 'left')
+    res.toker = T5Tokenizer.from_pretrained(f"google/flan-t5-{size}", truncation_side= 'left', model_max_length = max_token_size)
     # res.t5 = T5ForConditionalGeneration.from_pretrained("google/flan-t5-base")
     # res.toker = T5Tokenizer.from_pretrained("google/flan-t5-base")
     res.opter = torch.optim.AdamW(res.t5.parameters(), learning_rate)
@@ -269,5 +269,27 @@ def script(m):
             m.t5.zero_grad()
     print("--- %s seconds ---" % (time.time() - start_time))
     return m
+
+@torch.no_grad()
+def test_one_step(m, doc):
+    outputs = []
+    input_outputs = process_training_data(doc)
+    for input_text, label_text in input_outputs:
+        input_ids = m.toker(input_text, return_tensors="pt", truncation = True).input_ids.cuda()
+        text = m.toker.decode(m.t5.generate(input_ids)[0], skip_special_tokens=True)
+        outputs.append(text)
+    return outputs
+
+def print_in_out(m, doc):
+    outputs = test_one_step(m, doc)
+    input_outputs = process_training_data(doc)
+    ground_truths = [out_text for in_text, out_text in input_outputs]
+    for g,o in zip(ground_truths, outputs):
+        # if g == o and g != 'SHIFT':
+        if g != o and o != 'SHIFT':
+            print(g)
+            print(o)
+            print('')
+
 
 
