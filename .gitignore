@@ -4,3 +4,4 @@ __pycache__/
 *\.tch
 train.story-in-sequence.json
 tw_games
+check_points/

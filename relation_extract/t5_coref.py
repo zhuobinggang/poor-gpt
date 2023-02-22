@@ -21,6 +21,9 @@ def create_model(learning_rate = 2e-5, size = 'small', max_token_size = 512):
     res.t5.train()
     return res
 
+def save_model(m, name):
+    torch.save(m, f'./check_points/{name}.tch')
+
 dspath = {
         'train': '/usr01/taku/datasets/conll_eng_v4/train.english.v4_gold_conll',
         'test': '/usr01/taku/datasets/conll_eng_v4/test.english.v4_gold_conll',
@@ -246,27 +249,29 @@ doc_wrong = None
 
 # m = create_model(learning_rate = 2e-5, size = 'small')
 
-def script(m):
+def script(m, epoch = 1):
     global doc_wrong
     start_time = time.time()
     ds0, ds1 = load_ds()
-    for idx, doc in enumerate(ds0):
-        if (idx + 1) % 500 == 0: # Log
-            print(f'{idx} / {len(ds0)}')
-        try: 
-            input_outputs = process_training_data(doc)
-        except ValueError as e:
-            print(idx)
-            doc_wrong = doc
-            raise e
-        for input_text, label_text in input_outputs:
-            input_ids = m.toker(input_text, return_tensors="pt", truncation = True).input_ids.cuda()
-            labels = m.toker(label_text, return_tensors="pt").input_ids.cuda()
-            loss = m.t5(input_ids=input_ids, labels=labels).loss
-            loss.backward()
-            m.opter.step()
-            m.opter.zero_grad()
-            m.t5.zero_grad()
+    for e in range(epoch):
+        for idx, doc in enumerate(ds0):
+            if (idx + 1) % 500 == 0: # Log
+                print(f'{idx} / {len(ds0)}')
+            try: 
+                input_outputs = process_training_data(doc)
+            except ValueError as e:
+                print(idx)
+                doc_wrong = doc
+                raise e
+            for input_text, label_text in input_outputs:
+                input_ids = m.toker(input_text, return_tensors="pt", truncation = True).input_ids.cuda()
+                labels = m.toker(label_text, return_tensors="pt").input_ids.cuda()
+                loss = m.t5(input_ids=input_ids, labels=labels).loss
+                loss.backward()
+                m.opter.step()
+                m.opter.zero_grad()
+                m.t5.zero_grad()
+        save_model(m, name = f'e{e + 1}')
     print("--- %s seconds ---" % (time.time() - start_time))
     return m
 
@@ -285,8 +290,8 @@ def print_in_out(m, doc):
     input_outputs = process_training_data(doc)
     ground_truths = [out_text for in_text, out_text in input_outputs]
     for g,o in zip(ground_truths, outputs):
-        # if g == o and g != 'SHIFT':
-        if g != o and o != 'SHIFT':
+        if g == o and g != 'SHIFT':
+        # if g != o and o != 'SHIFT':
             print(g)
             print(o)
             print('')
