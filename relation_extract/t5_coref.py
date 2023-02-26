@@ -5,14 +5,18 @@ import numpy as np
 import time
 import types
 from conll2012_ontonotesv5 import Ontonotes
+import itertools
 
 
-def create_model(learning_rate = 2e-5, size = 'small', max_token_size = 512):
+def create_model(learning_rate = 2e-5, size = 'small', max_token_size = 512, t5 = None):
     res = types.SimpleNamespace()
     # NOTE
     # res.t5 = T5ForConditionalGeneration.from_pretrained("google/flan-t5-small")
     # res.toker = T5Tokenizer.from_pretrained("google/flan-t5-small")
-    res.t5 = T5ForConditionalGeneration.from_pretrained(f"google/flan-t5-{size}")
+    if t5 is None:
+        res.t5 = T5ForConditionalGeneration.from_pretrained(f"google/flan-t5-{size}")
+    else:
+        res.t5 = t5
     res.toker = T5Tokenizer.from_pretrained(f"google/flan-t5-{size}", truncation_side= 'left', model_max_length = max_token_size)
     # res.t5 = T5ForConditionalGeneration.from_pretrained("google/flan-t5-base")
     # res.toker = T5Tokenizer.from_pretrained("google/flan-t5-base")
@@ -22,7 +26,12 @@ def create_model(learning_rate = 2e-5, size = 'small', max_token_size = 512):
     return res
 
 def save_model(m, name):
-    torch.save(m, f'./check_points/{name}.tch')
+    torch.save(m.t5, f'./check_points/{name}.tch')
+
+def load_model(name, size, max_token_size, learning_rate = 2e-5):
+    t5 = torch.load(f'./check_points/{name}.tch')
+    res = create_model(learning_rate, size, max_token_size, t5)
+    return res
 
 dspath = {
         'train': '/usr01/taku/datasets/conll_eng_v4/train.english.v4_gold_conll',
@@ -74,19 +83,37 @@ def find_in_clusters(cid, clusters):
     return res_idx
 
 def split_and_trim(text, mark):
-    lst = [term for term in [s.strip() for s in text.split(mark)] if term != '']
-    term = lst[0]
+    lst = [s.strip() for s in text.split(mark)]
+    lst = [term for term in lst if term != '']
+    # raise ValueError(f'split_and_trim error, TEXT: {text}, MARK: {mark}')
+    term = '' if len(lst) < 1 else lst[0]
     suffix = lst[1] if len(lst) >1 else ''
     return term, suffix
 
 
 def contains(big, small):
     for i in reversed(range(len(big)-len(small)+1)): #NOTE: From end to start
-        for j in range(len(small)):
-            if big[i+j] != small[j]:
-                break
-        else:
-            return i, i+len(small)
+        temp_big = ''.join(big[i:])
+        temp_big = temp_big.replace(' ', '') # 解决空格赋予问题
+        temp_small = ''.join(small).replace(' ', '') # 解决空格赋予问题
+        try: 
+            _ = temp_big.index(temp_small)
+            # Restruct end
+            end = i
+            temp_text = ''
+            for j in range(i, len(big)):
+                temp_text += big[j]
+                if len(temp_text) == len(temp_small):
+                    return i, j
+            print(f'SHOULD NOT COME HERE, {temp_small}, {temp_big}')
+            return i, i + len(small)
+        except ValueError as e:
+            continue
+        # for j in range(len(small)):
+        #     if big[i+j] != small[j]:
+        #         break
+        # else:
+        #     return i, i+len(small)
     return None
 
 def set_or_create(dic, key, key2, value):
@@ -96,13 +123,16 @@ def set_or_create(dic, key, key2, value):
     dic[key][key2] = value
 
 
-# NOTE: 唯一改变的是mark
-def output_text_process_step_by_step(context_words, step_output_text, mark, cluster_idx):
-    should_increase_cluster_idx = False
+# NOTE: 唯一改变的是mark, cluster_dic_of_model
+# return_state = (0: SHIFT, 1: LINK, 2: APPEND)
+def output_text_process_step_by_step(context_words, step_output_text, mark, cluster_idx, cluster_dic_of_model = None, return_state = False):
     step = step_output_text
     if step == 'SHIFT':
-        print(f'OUTPUT_PROCESS(SHIFT)')
+        # print(f'OUTPUT_PROCESS(SHIFT)')
+        return (False, 0) if return_state else False
     else:
+        # TODO: 分解[,]不让他和前面的单词连在一起
+        step = ' , '.join(step.split(','))
         current, target = split_and_trim(step, '->')
         if target.startswith('['): # Append, 只需要给当前注目的tokens增加标记
             words, suffix = split_and_trim(current, '##')
@@ -110,52 +140,75 @@ def output_text_process_step_by_step(context_words, step_output_text, mark, clus
             suffix = suffix.split()
             find_myself = contains(context_words, words + suffix) # 在context_words中找到自己的位置，用于标记。比较tricky因为需要解码模型的文字输出
             if find_myself is None:
-                print(f'Wrong! Can not find current words from context! \n {words + suffix}')
+                print(f'Wrong WHEN APPEND! Can not find current words from context!')
+                print(step_output_text)
+                print(' '.join(context_words))
+                return (False, 0) if return_state else False
             else:
                 start, end = find_myself
                 end -= len(suffix)
                 cluster_idx = int(target.strip('['))
                 set_or_create(mark, start, 'prefix', f'[{cluster_idx}')
                 set_or_create(mark, end-1, 'suffix', f']')
-                # print(f'OUTPUT_PROCESS(APPEND): {words} ## {suffix}, 标记 {context_words[start]} ~ {context_words[end-1]} ')
+                if cluster_dic_of_model is not None:
+                    if cluster_idx not in cluster_dic_of_model:
+                        print(f'WRONG WHEN APPEND!! cluster_idx {cluster_idx} not in cluster_dic_of_model.')
+                        print(step_output_text)
+                        print(' '.join(context_words))
+                        return (False, 0) if return_state else False
+                    else:
+                        current_item_text = ' '.join(words)
+                        current_item_three_gram_suffix = ' '.join(suffix)
+                        item_current = (cluster_idx, current_item_text, current_item_three_gram_suffix)
+                        cluster_dic_of_model[cluster_idx].append(item_current)
+                        return (False, 2) if return_state else False # 2 = APPEND
         else: # LINK, 需要同时给过去和现在的token增加标记
-            # print('LINK')
-            should_increase_cluster_idx = True
-            # print(f'OUTPUT_PROCESS(LINK): and cluster index increased, now = {cluster_idx + 1}')
             # current
             words, suffix = split_and_trim(current, '##')
             words = words.split()
             suffix = suffix.split()
             find_myself = contains(context_words, words + suffix)
             if find_myself is None:
-                print(f'Wrong! Can not find current words from context! \n {words + suffix}')
+                print(f'Wrong WHEN LINK! Can not find current words from context!')
+                print(step_output_text)
+                print(' '.join(context_words))
+                return (False, 0) if return_state else False
             else:
-                start, end = find_myself
-                end -= len(suffix)
-                set_or_create(mark, start, 'prefix', f'[{cluster_idx + 1}')
-                set_or_create(mark, end-1, 'suffix', f']')
-                # print(f'(LINK BASE): {words} ## {suffix}, 标记 {context_words[start]} ~ {context_words[end-1]} ')
+                start_cur, end_cur = find_myself
+                end_cur -= len(suffix)
+                current_item_text = ' '.join(words)
+                current_item_three_gram_suffix = ' '.join(suffix)
             # target
             words, suffix = split_and_trim(target, '##')
             words = words.split()
             suffix = suffix.split()
             find_myself = contains(context_words, words + suffix)
             if find_myself is None:
-                print(f'Wrong! Can not find target words from context! \n {words + suffix}')
+                print(f'Wrong WHEN LINK! Can not find target words from context!')
+                print(step_output_text)
+                print(' '.join(context_words))
+                return (False, 0) if return_state else False
             else:
-                start, end = find_myself
-                end -= len(suffix)
-                set_or_create(mark, start, 'prefix', f'[{cluster_idx + 1}')
-                set_or_create(mark, end-1, 'suffix', f']')
-                # print(f'(LINK TARGET): {words} ## {suffix}, 标记 {context_words[start]} ~ {context_words[end-1]} ')
-                # print(f'LINK_target: {words + suffix} = {context_words[start]} ~ {context_words[end-1]} ')
-                # print(mark)
-    return should_increase_cluster_idx
+                start_tar, end_tar = find_myself
+                end_tar -= len(suffix)
+                target_item_text = ' '.join(words)
+                target_item_three_gram_suffix = ' '.join(suffix)
+            set_or_create(mark, start_cur, 'prefix', f'[{cluster_idx + 1}')
+            set_or_create(mark, end_cur-1, 'suffix', f']')
+            set_or_create(mark, start_tar, 'prefix', f'[{cluster_idx + 1}')
+            set_or_create(mark, end_tar-1, 'suffix', f']')
+            # Modify dic_cluster
+            if cluster_dic_of_model is not None:
+                item_current = (cluster_idx + 1, current_item_text, current_item_three_gram_suffix)
+                item_target = (cluster_idx + 1, target_item_text, target_item_three_gram_suffix)
+                cluster_dic_of_model[cluster_idx + 1] = [item_current, item_target]
+            return (True, 1) if return_state else True # (True = should add cluster, 1 = LINK)
+    raise ValueError('WRONG: SHOULD NOT COME HERE!!!')
     
 s_wrong = None
 
 # Prepare for the training set
-def process_training_data(document):
+def process_training_data(document, need_ground_truth_dic = False):
     global s_wrong
     cluster_dic = {} # 每次mention创建一个位置，key=cid
     # clusters = [] # 根据模型输出创建和更新的clusters，每次LINK更新下标
@@ -163,6 +216,7 @@ def process_training_data(document):
     context_words = [] # 就是s.words摊开，包含当前处理的句子单词
     cluster_idx_increase = 0 # 因为根据ouput来处理的时候cluster_idx是顺序递增的，跟cid不同
     mark = {} # (prefix, suffix) # {token_id: {prefix, suffix}}
+    cluster_dic_ground_truth = {}
     for idx, s in enumerate(document):
         # 将说话人添加到mark[idx]
         if s.speakers[0] is not None:
@@ -183,7 +237,7 @@ def process_training_data(document):
                     output_text = f'{current_item_text} ## {current_item_three_gram_suffix} -> {previou_item_text} ## {previou_item_three_gram_suffix}'
                     input_outputs.append((input_text, output_text))
                     try:
-                        should_increase = output_text_process_step_by_step(context_words, output_text, mark, cluster_idx_increase)
+                        should_increase = output_text_process_step_by_step(context_words, output_text, mark, cluster_idx_increase, cluster_dic_ground_truth)
                     except ValueError as e:
                         s_wrong = s
                         print(f'{idx}: {output_text}')
@@ -197,7 +251,7 @@ def process_training_data(document):
                     output_text = f'{current_item_text} ## {current_item_three_gram_suffix} -> [{cluster_idx_increase}'
                     input_outputs.append((input_text, output_text))
                     try:
-                        should_increase = output_text_process_step_by_step(context_words, output_text, mark, cluster_idx_increase)
+                        should_increase = output_text_process_step_by_step(context_words, output_text, mark, cluster_idx_increase, cluster_dic_ground_truth)
                     except ValueError as e:
                         s_wrong = s
                         print(f'{idx}: {output_text}')
@@ -211,7 +265,10 @@ def process_training_data(document):
         output_text = 'SHIFT'
         input_outputs.append((input_text, output_text))
         # combine output text
-    return input_outputs
+    if need_ground_truth_dic:
+        return input_outputs, cluster_dic_ground_truth
+    else: 
+        return input_outputs
 
 
 def compress_context_words_and_marks(context_words, mark):
@@ -249,7 +306,7 @@ doc_wrong = None
 
 # m = create_model(learning_rate = 2e-5, size = 'small')
 
-def script(m, epoch = 1):
+def train_epochs(m, epoch = 1):
     global doc_wrong
     start_time = time.time()
     ds0, ds1 = load_ds()
@@ -295,6 +352,74 @@ def print_in_out(m, doc):
             print(g)
             print(o)
             print('')
+
+
+###################### For inference ########################
+
+def inference(m, doc):
+    cluster_idx_increase = 0 # 因为根据ouput来处理的时候cluster_idx是顺序递增的，跟cid不同
+    context_words = [] # 就是s.words摊开，包含当前处理的句子单词
+    mark = {} # (prefix, suffix) # {token_id: {prefix, suffix}}
+    cluster_dic_of_model = {} # 模型专用的dic
+    commands = []
+    for idx, s in enumerate(doc):
+        # 将说话人添加到mark[idx]
+        if s.speakers[0] is not None:
+            set_or_create(mark, len(context_words), 'speaker', s.speakers[0])
+        context_words += s.words
+        # TODO: 因为一句话可以产生多个命令，需要反复确认step_output_text是否为SHIFT
+        loop = True
+        while loop:
+            # Inference by model
+            input_text = compress_context_words_and_marks(context_words, mark) # 单个句子里面可能会多次更新mark，造成input_text的变更。这说明input_output是对应于command而非句子的
+            input_ids = m.toker(input_text, return_tensors="pt", truncation = True).input_ids.cuda()
+            step_output_text = m.toker.decode(m.t5.generate(input_ids)[0], skip_special_tokens=True)
+            should_increase_cluster_idx, state= output_text_process_step_by_step(context_words, step_output_text, mark, cluster_idx_increase, cluster_dic_of_model, return_state = True)
+            commands.append(step_output_text)
+            loop = False if state == 0 else True
+    return cluster_dic_of_model, commands
+
+def cluster_dic_to_pairs(dic):
+    res = []
+    for key in dic:
+        lst = [f'{stem} {suffix}' for cid,stem,suffix in dic[key]]
+        res += list(itertools.combinations(lst,2))
+    return res
+
+def pairs_in(pair, pairs):
+    my_term, my_suffix = pair
+    my_text = (my_term + my_suffix).replace(' ', '')
+    for their_pair in pairs:
+        their_term, their_suffix = their_pair
+        their_text = (their_term + their_suffix).replace(' ', '')
+        if (their_text in my_text) or (my_text in their_text):
+            return True
+    return False
+
+def cal_paired_f(dic_true, dic_pred):
+    c_true = cluster_dic_to_pairs(dic_true)
+    c_pred = cluster_dic_to_pairs(dic_pred)
+    TP = sum([1 for pair in c_true if pairs_in(pair, c_pred)])
+    FN = len(c_true) - TP
+    FP = len(c_pred) - TP
+    prec = TP / (TP + FP)
+    rec = TP / (TP + FN)
+    f = 2 * (prec * rec) / (prec + rec)
+    return prec, rec, f
+
+def script():
+    y_pred = []
+    y_true = []
+    _, ds_test = load_ds(load_train = False)
+    m = load_model('e5_only_t5', 'base', 128 * 3)
+    for doc in ds_test:
+        _, ground_truth_dic = process_training_data(doc, need_ground_truth_dic = True)
+        with torch.no_grad():
+            cluster_dic_of_model, _ = inference(m, doc)
+        y_pred.append(cluster_dic_of_model)
+        y_true.append(ground_truth_dic)
+
+
 
 
 

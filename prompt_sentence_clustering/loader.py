@@ -1,4 +1,3 @@
-from common import *
 import re
 import csv
 import unicodedata
