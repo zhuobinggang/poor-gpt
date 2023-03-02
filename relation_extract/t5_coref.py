@@ -103,7 +103,7 @@ def contains(big, small):
             temp_text = ''
             for j in range(i, len(big)):
                 temp_text += big[j]
-                if len(temp_text) == len(temp_small):
+                if len(temp_text) >= len(temp_small):
                     return i, j
             print(f'SHOULD NOT COME HERE, {temp_small}, {temp_big}')
             return i, i + len(small)
@@ -142,19 +142,26 @@ def output_text_process_step_by_step(context_words, step_output_text, mark, clus
             if find_myself is None:
                 print(f'Wrong WHEN APPEND! Can not find current words from context!')
                 print(step_output_text)
-                print(' '.join(context_words))
+                print(' '.join(context_words[-30:]))
                 return (False, 0) if return_state else False
             else:
                 start, end = find_myself
                 end -= len(suffix)
-                cluster_idx = int(target.strip('['))
+                try: 
+                    cluster_idx = int(target.strip('['))
+                except ValueError as e:
+                    print(f'WRONG CLUSTER INDEX!!')
+                    print(step_output_text)
+                    print(' '.join(context_words[-30:]))
+                    return (False, 0) if return_state else False
+
                 set_or_create(mark, start, 'prefix', f'[{cluster_idx}')
                 set_or_create(mark, end-1, 'suffix', f']')
                 if cluster_dic_of_model is not None:
                     if cluster_idx not in cluster_dic_of_model:
                         print(f'WRONG WHEN APPEND!! cluster_idx {cluster_idx} not in cluster_dic_of_model.')
                         print(step_output_text)
-                        print(' '.join(context_words))
+                        print(' '.join(context_words[-30:]))
                         return (False, 0) if return_state else False
                     else:
                         current_item_text = ' '.join(words)
@@ -171,7 +178,7 @@ def output_text_process_step_by_step(context_words, step_output_text, mark, clus
             if find_myself is None:
                 print(f'Wrong WHEN LINK! Can not find current words from context!')
                 print(step_output_text)
-                print(' '.join(context_words))
+                print(' '.join(context_words[-30:]))
                 return (False, 0) if return_state else False
             else:
                 start_cur, end_cur = find_myself
@@ -186,7 +193,7 @@ def output_text_process_step_by_step(context_words, step_output_text, mark, clus
             if find_myself is None:
                 print(f'Wrong WHEN LINK! Can not find target words from context!')
                 print(step_output_text)
-                print(' '.join(context_words))
+                print(' '.join(context_words[-30:]))
                 return (False, 0) if return_state else False
             else:
                 start_tar, end_tar = find_myself
@@ -418,6 +425,17 @@ def script():
             cluster_dic_of_model, _ = inference(m, doc)
         y_pred.append(cluster_dic_of_model)
         y_true.append(ground_truth_dic)
+    ress = []
+    for idx, (dic_true, dic_pred) in enumerate(zip(y_true, y_pred)):
+        try:
+            ress.append(cal_paired_f(dic_true, dic_pred))
+        except ZeroDivisionError as e:
+            print('ZeroDivisionError: WRONG at idx = {idx}')
+            c_true = cluster_dic_to_pairs(dic_true)
+            c_pred = cluster_dic_to_pairs(dic_pred)
+            print(c_true)
+            print(c_pred)
+            ress.append((0,0,0))
 
 
 

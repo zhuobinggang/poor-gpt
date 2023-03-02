@@ -5,9 +5,9 @@ import unicodedata
 def find_in_nest_lst_soft(lst, item):
     for current_idx, current_items in enumerate(lst):
         for current_item in current_items:
-            if abs(len(current_item) - len(item)) < 2:
-                x = unicodedata.normalize('NFKC',current_item)
-                y = unicodedata.normalize('NFKC',item)
+            x = unicodedata.normalize('NFKC',current_item).replace(' ', '').replace('　', '')
+            y = unicodedata.normalize('NFKC',item).replace(' ', '').replace('　', '')
+            if abs(len(x) - len(y)) < 2:
                 if x in y or y in x:
                     return current_idx
     return -1
@@ -26,7 +26,7 @@ def find_in_lst_soft(lst, item):
                     break
         return target_idx
 
-def load_docs(filename = './data/goutou.txt'):
+def load_docs_old(filename = './data/goutou.txt'):
     f = open(filename)
     lines = f.readlines()
     f.close()
@@ -45,12 +45,39 @@ def load_docs(filename = './data/goutou.txt'):
                 current_doc['ss'].append(line.strip()) # NOTE: Strip or not are the same for BERT
     return docs
 
-def read_label(filename = './data/GOUTOU_SEIKAI_TABLE.csv'):
+# Compatible with load_docs_old
+def load_docs(filename = 'goutou'):
+    filename = f'./data/{filename}.txt'
+    f = open(filename)
+    lines = f.readlines()
+    f.close()
+    docs = []
+    for line in lines:
+        if line.startswith('<doc'):
+            current_doc = {}
+            title = re.findall('.*? title=\"(.*?)\".*', line)[0]
+            current_doc['title'] = title
+            current_doc['ss'] = [title]
+        elif line.startswith('</doc>'):
+            docs.append(current_doc.copy()) # old one
+        else:
+            if len(line.strip()) < 1:
+                pass
+            else:
+                # TODO: 以。为界区分句子
+                for sentence in re.findall('(.*?。|.*$)', line):
+                    sentence = sentence.strip()
+                    if len(sentence) > 0:
+                        current_doc['ss'].append(sentence) # NOTE: Strip or not are the same for BERT
+    return docs
+
+def read_label(filename = 'goutou'):
     # filename = '/usr01/taku/datasets/table_cluster/table/GOUTOU_SEIKAI_TABLE.csv'
     # filename = '/usr01/taku/datasets/table_cluster/table/CAMERA_SEIKAI_TABLE.csv'
+    filename = f'./data/{filename}.csv'
     f = open(filename)
     rd = csv.reader(f, delimiter=',', quotechar='|')
-    cols = next(rd)
+    col_titles = next(rd)
     # cols = cols[0].split(',')
     rows = []
     for row in rd:
@@ -63,7 +90,7 @@ def read_label(filename = './data/GOUTOU_SEIKAI_TABLE.csv'):
             cols.append(col_ss)
         rows.append(cols)
     f.close()
-    return cols, rows
+    return col_titles, rows
 
 def check_ground_truth_fine(ground_truth, ss):
     for col in ground_truth:
@@ -73,22 +100,25 @@ def check_ground_truth_fine(ground_truth, ss):
                 raise ValueError
     return True
 
-def recheck():
-    docs = load_docs()
-    cols, ground_truths = read_label()
+def recheck(name):
+    docs = load_docs(name)
+    cols, ground_truths = read_label(name)
+    assert len(ground_truths) == len(docs)
     # TODO: Check paring is good!
     for idx, (ground_truth, doc) in enumerate(zip(ground_truths, docs)):
+        if len(ground_truth) != len(cols):
+            raise ValueError(f'WRONG NUMBER of cols! {idx}')
         try:
             check_ground_truth_fine(ground_truth, doc['ss'])
         except ValueError as e:
             print(f'IDX = {idx}')
             raise e
 
-def create_training_data():
+def create_training_data(name = 'goutou'):
     res = []
-    docs = load_docs()
-    cols, ground_truths = read_label()
-    recheck()
+    docs = load_docs(name)
+    cols, ground_truths = read_label(name)
+    recheck(name)
     assert len(docs) == len(ground_truths) # Need to pair
     for current_idx in range(1, len(docs)):
         pre_idx = current_idx - 1

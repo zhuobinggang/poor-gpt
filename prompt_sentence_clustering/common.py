@@ -7,15 +7,27 @@ import scipy.stats as stats
 import math
 
 
-def create_model(learning_rate = 1e-5):
+def create_model(learning_rate = 1e-5, bert = None):
     res = types.SimpleNamespace()
     # NOTE
-    res.bert = BertForMaskedLM.from_pretrained('cl-tohoku/bert-base-japanese-whole-word-masking')
+    if bert is None:
+        res.bert = BertForMaskedLM.from_pretrained('cl-tohoku/bert-base-japanese-whole-word-masking')
+    else:
+        res.bert = bert
     res.toker = BertJapaneseTokenizer.from_pretrained('cl-tohoku/bert-base-japanese-whole-word-masking')
     res.opter = torch.optim.AdamW(res.bert.parameters(), learning_rate)
+    res.learning_rate = learning_rate
     res.bert.cuda()
     res.bert.train()
     return res
+
+def save_model(m, name):
+    torch.save(m.bert, f'./check_points/{name}.tch')
+
+def load_model(name):
+    bert = torch.load(f'./check_points/{name}.tch')
+    m = create_model(bert = bert)
+    return m
 
 # REUSABLE
 def create_model_with_trainable_prefix(word, length, learning_rate = 5e-5):
