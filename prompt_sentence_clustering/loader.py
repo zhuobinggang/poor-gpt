@@ -14,16 +14,19 @@ def find_startswith_in_ss(ss, start):
     return -1
 
 def text_get_rid_of_weird_things(text):
-    weird_chars = [' ', '　', '、', '，', ',', '。', '.', '。', '−', '-', '’', "'"]
+    weird_chars = [' ', '　', '、', '，', ',', '。', '.', '。', '−', '-', '’', "'", '"']
     text = unicodedata.normalize('NFKC',text)
     for weird_char in weird_chars:
         text = text.replace(weird_char, '')
+    # Get rid of brackets
+    text = re.sub('（.*?）', '', text)
+    text = re.sub('\(.*?\)', '', text)
     return text
 
 # NOTE: Only between sentence from doc, and sentence from table
 def text_equal(x, y):
-    x = text_get_rid_of_weird_things(re.sub('（.*?）', '', x))
-    y = text_get_rid_of_weird_things(re.sub('（.*?）', '', y))
+    x = text_get_rid_of_weird_things(x)
+    y = text_get_rid_of_weird_things(y)
     if abs(len(x) - len(y)) < 2:
         if x in y or y in x:
             return True
