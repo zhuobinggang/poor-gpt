@@ -2,8 +2,19 @@ import re
 import csv
 import unicodedata
 
+def different_character_scan(x,y):
+    for idx, (c1, c2) in enumerate(zip(x,y)):
+        if c1 != c2:
+            print(f'{c1} != {c2}, IDX = {idx}')
+
+def find_startswith_in_ss(ss, start):
+    for idx, s in enumerate(ss):
+        if s.startswith(start):
+            return idx
+    return -1
+
 def text_get_rid_of_weird_things(text):
-    weird_chars = [' ', '　', '、', '，', ',', '。', '.', '。']
+    weird_chars = [' ', '　', '、', '，', ',', '。', '.', '。', '−', '-', '’', "'"]
     text = unicodedata.normalize('NFKC',text)
     for weird_char in weird_chars:
         text = text.replace(weird_char, '')
@@ -120,6 +131,11 @@ def csv_check(cols, rows):
     for idx, row in enumerate(rows):
         if len(row) != length:
             raise ValueError(f'Table wrong! IDX = {idx}, LEN = {len(row)}, ROW = {row}')
+
+def get_docs_and_rows(name):
+    docs = load_docs(name)
+    cols, rows = read_label(name)
+    return docs, cols, rows
 
 def recheck(name):
     docs = load_docs(name)
