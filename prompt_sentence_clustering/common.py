@@ -6,6 +6,12 @@ import matplotlib.pyplot as plt
 import scipy.stats as stats
 import math
 
+def find_sub_list(l,sl):
+    sll=len(sl)
+    for ind in (i for i,e in enumerate(l) if e==sl[0]):
+        if l[ind:ind+sll]==sl:
+            return ind,ind+sll-1
+    return -1, -1
 
 def create_model(learning_rate = 1e-5, bert = None):
     res = types.SimpleNamespace()

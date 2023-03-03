@@ -155,7 +155,44 @@ def recheck(name):
             print(f'IDX = {idx}')
             raise e
 
-def create_training_data(name = 'goutou'):
+def find_sub_list(l,sl):
+    sll=len(sl)
+    for ind in (i for i,e in enumerate(l) if e==sl[0]):
+        if l[ind:ind+sll]==sl:
+            return ind,ind+sll-1
+    return -1, -1
+
+def create_prompt_keep_context_size(context, current_sentence, need_limit_input_size = False, focus_idx = 0):
+    if (not need_limit_input_size) or focus_idx == -1 or len(context) < 500:
+        prompt = f'{context} | 次の文は[MASK]番の文と似ている: {current_sentence}'
+        return prompt
+    else:
+        start, _ = find_sub_list(context, f'[{focus_idx}]')
+        if start == -1:
+            raise ValueError(f'CAN NOT FIND [{focus_idx}] FROM CONTEXT! CONTEXT: {context}')
+        else:
+            # Left: 200, right: 300
+            if start - 200 < 0:
+                remainder = 200 - start
+                head = 0
+                tail = start + 300 + remainder
+                assert tail < len(context)
+            elif start + 300 >= len(context):
+                remainder = start + 300 - len(context)
+                tail = len(context) - 1
+                head = start - 200 - remainder
+                assert head >= 0
+            else:
+                head = start - 200
+                tail = start + 300
+                assert head >= 0
+                assert tail < len(context)
+            context_cut = context[head:tail]
+            prompt = f'{context_cut} | 次の文は[MASK]番の文と似ている: {current_sentence}'
+            # print(f'CONTEXT TOO LONG WAS CUTTED! LABEL = {focus_idx}, PROMPT: {prompt}')
+            return prompt
+
+def create_training_data(name = 'goutou', need_limit_input_size = False):
     res = []
     docs = load_docs(name)
     cols, ground_truths = read_label(name)
@@ -169,11 +206,12 @@ def create_training_data(name = 'goutou'):
         context = ''
         for idx, s in enumerate(pre_doc['ss']):
             context += f' [{idx}] {s} '
+        # TODO: Cut head & tail if context is too long!
         # Prepare LINK
         ground_truth_me = ground_truths[current_idx] 
         ground_truth_pre = ground_truths[pre_idx]
         for current_sentence in current_doc['ss']:
-            prompt = f'{context} | 次の文は[MASK]番の文と似ている: {current_sentence}'
+            # prompt = f'{context} | 次の文は[MASK]番の文と似ている: {current_sentence}'
             cluster_idx = find_in_lst_soft(ground_truth_me, current_sentence)
             if cluster_idx >= len(ground_truth_pre):
                 print(f'ERR! DOC_IDX: {current_idx}, CLUSTER_IDX: {cluster_idx}, S: {current_sentence}, G: {ground_truth_pre}')
@@ -185,8 +223,10 @@ def create_training_data(name = 'goutou'):
                     if index_in_prev_doc == -1:
                         print(f'ERR! DOC_IDX: {current_idx}, CLUSTER_IDX: {cluster_idx}, S: {current_sentence}')
                         raise ValueError
+                    prompt = create_prompt_keep_context_size(context, current_sentence, need_limit_input_size = need_limit_input_size, focus_idx = index_in_prev_doc)
                     res.append((prompt, index_in_prev_doc))
-            else:
+            else: # -1
+                prompt = create_prompt_keep_context_size(context, current_sentence, need_limit_input_size = need_limit_input_size, focus_idx = 0)
                 res.append((prompt, -1))
     return res
 
