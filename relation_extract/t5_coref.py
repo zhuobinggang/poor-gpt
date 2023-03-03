@@ -418,7 +418,7 @@ def script():
     y_pred = []
     y_true = []
     _, ds_test = load_ds(load_train = False)
-    m = load_model('e5_only_t5', 'base', 128 * 3)
+    m = load_model('e9', 'base', 128 * 3)
     for doc in ds_test:
         _, ground_truth_dic = process_training_data(doc, need_ground_truth_dic = True)
         with torch.no_grad():

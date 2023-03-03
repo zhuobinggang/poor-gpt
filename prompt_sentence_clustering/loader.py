@@ -2,29 +2,37 @@ import re
 import csv
 import unicodedata
 
+def text_get_rid_of_weird_things(text):
+    weird_chars = [' ', '　', '、', '，', ',', '。', '.', '。']
+    text = unicodedata.normalize('NFKC',text)
+    for weird_char in weird_chars:
+        text = text.replace(weird_char, '')
+    return text
+
+# NOTE: Only between sentence from doc, and sentence from table
+def text_equal(x, y):
+    x = text_get_rid_of_weird_things(re.sub('（.*?）', '', x))
+    y = text_get_rid_of_weird_things(re.sub('（.*?）', '', y))
+    if abs(len(x) - len(y)) < 2:
+        if x in y or y in x:
+            return True
+    return False
+
 def find_in_nest_lst_soft(lst, item):
     for current_idx, current_items in enumerate(lst):
         for current_item in current_items:
-            x = unicodedata.normalize('NFKC',current_item).replace(' ', '').replace('　', '')
-            y = unicodedata.normalize('NFKC',item).replace(' ', '').replace('　', '')
-            if abs(len(x) - len(y)) < 2:
-                if x in y or y in x:
-                    return current_idx
+            if text_equal(current_item, item):
+                return current_idx
     return -1
 
 def find_in_lst_soft(lst, item):
     if isinstance(lst[0], list):
         return find_in_nest_lst_soft(lst, item)
     else:
-        target_idx = -1
         for current_idx, current_item in enumerate(lst):
-            if abs(len(current_item) - len(item)) < 2:
-                x = unicodedata.normalize('NFKC',current_item)
-                y = unicodedata.normalize('NFKC',item)
-                if x in y or y in x:
-                    target_idx = current_idx
-                    break
-        return target_idx
+            if text_equal(current_item, item):
+                return current_idx
+        return -1
 
 def load_docs_old(filename = './data/goutou.txt'):
     f = open(filename)
@@ -92,12 +100,14 @@ def read_label(filename = 'goutou'):
     f.close()
     return col_titles, rows
 
-def check_ground_truth_fine(ground_truth, ss):
-    for col in ground_truth:
-        for sentence in col:
+def check_ground_truth_fine(ground_truth, ss, col_names = None):
+    for col_idx, col in enumerate(ground_truth):
+        for sent_idx, sentence in enumerate(col):
             if sentence != '' and find_in_lst_soft(ss, sentence) == -1:
-                print(f'ERR: sentence in cluster but not in the article! sentence: {sentence}')
-                raise ValueError
+                if col_names is None:
+                    raise ValueError(f'ERR: ({col_idx},{sent_idx}) sentence in cluster but not in the article! sentence: {sentence}')
+                else:
+                    raise ValueError(f'ERR: Colname: {col_names[col_idx]}, ({col_idx},{sent_idx}) sentence in cluster but not in the article! sentence: {sentence}')
     return True
 
 def recheck(name):
@@ -109,7 +119,7 @@ def recheck(name):
         if len(ground_truth) != len(cols):
             raise ValueError(f'WRONG NUMBER of cols! {idx}')
         try:
-            check_ground_truth_fine(ground_truth, doc['ss'])
+            check_ground_truth_fine(ground_truth, doc['ss'], cols)
         except ValueError as e:
             print(f'IDX = {idx}')
             raise e
