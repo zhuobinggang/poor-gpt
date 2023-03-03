@@ -110,9 +110,21 @@ def check_ground_truth_fine(ground_truth, ss, col_names = None):
                     raise ValueError(f'ERR: Colname: {col_names[col_idx]}, ({col_idx},{sent_idx}) sentence in cluster but not in the article! sentence: {sentence}')
     return True
 
+
+def csv_check_by_name(name):
+    cols, ground_truths = read_label(name)
+    csv_check(cols, ground_truths)
+
+def csv_check(cols, rows):
+    length = len(cols)
+    for idx, row in enumerate(rows):
+        if len(row) != length:
+            raise ValueError(f'Table wrong! IDX = {idx}, LEN = {len(row)}, ROW = {row}')
+
 def recheck(name):
     docs = load_docs(name)
     cols, ground_truths = read_label(name)
+    csv_check(cols, ground_truths)
     assert len(ground_truths) == len(docs)
     # TODO: Check paring is good!
     for idx, (ground_truth, doc) in enumerate(zip(ground_truths, docs)):

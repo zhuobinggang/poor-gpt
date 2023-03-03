@@ -117,9 +117,9 @@ def ground_true(name):
                 sentence_idx = find_in_lst_soft(ss, s)
                 if sentence_idx != -1:
                     if cid in what:
-                        what[cid].append((doc_idx, sentence_idx, ""))
+                        what[cid].append((doc_idx, sentence_idx, s))
                     else:
-                        what[cid] = [(doc_idx, sentence_idx, "")]
+                        what[cid] = [(doc_idx, sentence_idx, s)]
                 else:
                     print('WRONG!')
     what = [what[key] for key in what]
