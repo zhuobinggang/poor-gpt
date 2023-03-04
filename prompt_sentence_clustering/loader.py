@@ -2,6 +2,10 @@ import re
 import csv
 import unicodedata
 
+
+def flatten(l):
+    return [item for sublist in l for item in sublist]
+
 def different_character_scan(x,y):
     for idx, (c1, c2) in enumerate(zip(x,y)):
         if c1 != c2:
@@ -162,9 +166,24 @@ def find_sub_list(l,sl):
             return ind,ind+sll-1
     return -1, -1
 
-def create_prompt_keep_context_size(context, current_sentence, need_limit_input_size = False, focus_idx = 0):
+# Limit sentence length according to the number of sentences
+def create_prompt_keep_context_size(ss, current_sentence, need_limit_input_size = False, MAX_LENGTH = 600):
+    context = ''
+    if (not need_limit_input_size) or len(context) < MAX_LENGTH:
+        for idx, s in enumerate(ss):
+            context += f' [{idx}] {s} '
+    else:
+        AVG_LENGTH = int(MAX_LENGTH / len(ss))
+        for idx, s in enumerate(ss):
+            s_cut = s[:AVG_LENGTH]
+            s_cut = f'{s_cut} …'
+            context += f' [{idx}] {s_cut} '
+    prompt = f'{context} | 次の文は[MASK]番の文と似ている: {current_sentence}'
+    return prompt
+
+def create_prompt_keep_context_size_old(context, current_sentence, need_limit_input_size = False, focus_idx = 0):
     if (not need_limit_input_size) or focus_idx == -1 or len(context) < 500:
-        prompt = f'{context} | 次の文は([MASK])番目の文と似ている: {current_sentence}'
+        prompt = f'{context} | 次の文は[MASK]番の文と似ている: {current_sentence}'
         return prompt
     else:
         start, _ = find_sub_list(context, f'[{focus_idx}]')
@@ -192,7 +211,48 @@ def create_prompt_keep_context_size(context, current_sentence, need_limit_input_
             # print(f'CONTEXT TOO LONG WAS CUTTED! LABEL = {focus_idx}, PROMPT: {prompt}')
             return prompt
 
-def create_training_data(name = 'goutou', need_limit_input_size = False):
+def create_training_data(name = 'goutou', need_limit_input_size = False, split_by_docs = False):
+    ress = []
+    docs = load_docs(name)
+    cols, ground_truths = read_label(name)
+    recheck(name)
+    assert len(docs) == len(ground_truths) # Need to pair
+    for current_idx in range(1, len(docs)):
+        res = []
+        pre_idx = current_idx - 1
+        pre_doc = docs[pre_idx]
+
+        # Prepare LINK
+        ground_truth_me = ground_truths[current_idx] 
+        ground_truth_pre = ground_truths[pre_idx]
+        for current_sentence in docs[current_idx]['ss']:
+            # prompt = f'{context} | 次の文は[MASK]番の文と似ている: {current_sentence}'
+            cluster_idx = find_in_lst_soft(ground_truth_me, current_sentence)
+            if cluster_idx >= len(ground_truth_pre):
+                print(f'ERR! DOC_IDX: {current_idx}, CLUSTER_IDX: {cluster_idx}, S: {current_sentence}, G: {ground_truth_pre}')
+                raise ValueError
+            if cluster_idx != -1 and len(ground_truth_pre[cluster_idx]) > 0: # 存在cluster
+                res_multiple = []
+                # Find index of the sentence in the previous article
+                for possible_sentence in ground_truth_pre[cluster_idx]:
+                    index_in_prev_doc = find_in_lst_soft(pre_doc['ss'], possible_sentence)
+                    if index_in_prev_doc == -1:
+                        print(f'ERR! DOC_IDX: {current_idx}, CLUSTER_IDX: {cluster_idx}, S: {current_sentence}')
+                        raise ValueError
+                    prompt = create_prompt_keep_context_size(pre_doc['ss'], current_sentence, need_limit_input_size = need_limit_input_size)
+                    res_multiple.append((prompt, index_in_prev_doc))
+                res.append(res_multiple)
+            else: # -1
+                prompt = create_prompt_keep_context_size(pre_doc['ss'], current_sentence, need_limit_input_size = need_limit_input_size)
+                res.append([(prompt, -1)])
+        ress.append(res.copy())
+    assert len(ress) == 19
+    if split_by_docs:
+        return ress
+    else:
+        return flatten(flatten(ress))
+
+def create_training_data_old(name = 'goutou', need_limit_input_size = False):
     res = []
     docs = load_docs(name)
     cols, ground_truths = read_label(name)
@@ -223,10 +283,10 @@ def create_training_data(name = 'goutou', need_limit_input_size = False):
                     if index_in_prev_doc == -1:
                         print(f'ERR! DOC_IDX: {current_idx}, CLUSTER_IDX: {cluster_idx}, S: {current_sentence}')
                         raise ValueError
-                    prompt = create_prompt_keep_context_size(context, current_sentence, need_limit_input_size = need_limit_input_size, focus_idx = index_in_prev_doc)
+                    prompt = create_prompt_keep_context_size_old(context, current_sentence, need_limit_input_size = need_limit_input_size, focus_idx = index_in_prev_doc)
                     res.append((prompt, index_in_prev_doc))
             else: # -1
-                prompt = create_prompt_keep_context_size(context, current_sentence, need_limit_input_size = need_limit_input_size, focus_idx = 0)
+                prompt = create_prompt_keep_context_size_old(context, current_sentence, need_limit_input_size = need_limit_input_size, focus_idx = 0)
                 res.append((prompt, -1))
     return res
 

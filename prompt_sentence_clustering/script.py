@@ -29,7 +29,7 @@ def try_train(m, epoch = 1, ds = None):
         losses += train_one_epoch(m, ds, cal_loss, m.opter, batch = 16, log_inteval = 16)
     return losses
 
-def test_skip(m, tds = None):
+def test_skip(m, tds = None, skip = True):
     if tds is None:
         _, tds = dataset_test(shuffle = False)
     preds = []
@@ -41,13 +41,14 @@ def test_skip(m, tds = None):
     # cal prec
     zero_ones = []
     for pred, true in zip(preds, trues):
-        if true != -1:
+        if (not skip) or (skip and true != -1):
             if pred == true:
                 zero_ones.append(1)
             else:
                 zero_ones.append(0)
     return sum(zero_ones) / len(zero_ones)
 
+# Batch Running
 def script(epoch = 20):
     start_time = time.time()
     _, tds = dataset_test(shuffle = False, skip_negative = True)
@@ -69,5 +70,6 @@ def script(epoch = 20):
         save_model(m, f'with_negative_e{i}')
     print("--- %s seconds ---" % (time.time() - start_time))
     return precs_skip, precs_no_skip
+
 
 

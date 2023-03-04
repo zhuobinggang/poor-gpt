@@ -40,51 +40,43 @@ def get_predicted_word(m, prompt):
 
 ######################## 2023.3.1 #########################
 
-def inference(m, docs):
+def inference(m, name):
+    docs = load_docs(name)
     assert len(docs) == 20
-    matrix = np.full((20, 20), -1, dtype=int) # (docs, sentences), assume the number of sentences will not exceed 20
+    matrix = np.full((20, 30), -1, dtype=int) # (docs, sentences), assume the number of sentences will not exceed 20
     clusters = []
     cluster_idx_increase = -1
-    for current_doc_idx in range(1, len(docs)):
-        pre_doc_idx = current_doc_idx - 1
-        pre_doc = docs[pre_doc_idx]
-        assert len(pre_doc['ss']) < 21
-        current_doc = docs[current_doc_idx]
-        context = ''
-        for idx, s in enumerate(pre_doc['ss']):
-            context += f' [{idx}] {s} '
-        for current_doc_sentence_idx, current_sentence in enumerate(current_doc['ss']):
-            prompt = f'{context} | 次の文は[MASK]番の文と似ている: {current_sentence}'
-            pre_doc_sentence_idx = get_predicted_word(m,prompt)
-            if pre_doc_sentence_idx in ['?', '？']:
-                pre_doc_sentence_idx = -1
-            else:
-                try:
-                    pre_doc_sentence_idx = int(pre_doc_sentence_idx)
-                except ValueError as e:
-                    print(e)
-                    print(f'Wrong output: {pre_doc_sentence_idx}\n Prompt: {prompt}')
-                    pre_doc_sentence_idx = -1
-            if pre_doc_sentence_idx != -1: # LINK or APPEND
-                if pre_doc_sentence_idx >= len(pre_doc['ss']):
-                    print(context)
-                    print(pre_doc_sentence_idx)
-                    raise ValueError(f'{pre_doc_sentence_idx} will out of range!')
-                if matrix[pre_doc_idx, pre_doc_sentence_idx] == -1: # LINK
+    tdss = create_training_data(name = name, need_limit_input_size = True, split_by_docs = True)
+    for pre_doc_idx, tds in enumerate(tdss):
+        current_doc_idx = pre_doc_idx + 1
+        # TODO
+        for current_doc_sentence_idx, items in enumerate(tds):
+            #if len(items) > 1:
+                #assert items[0][0] == items[1][0]
+            item = items[0]
+            pred, _ = dry_run(m, item)
+            if pred != -1: # LINK or APPEND
+                if pred >= len(docs[pre_doc_idx]['ss']):
+                    print(f'{pred} will out of range!: \n Prompt: {prompt}')
+                    pred = -1
+                if matrix[pre_doc_idx, pred] == -1: # LINK
                     cluster_idx_increase += 1
-                    matrix[pre_doc_idx, pre_doc_sentence_idx] = cluster_idx_increase # UPDATE MATRIX
+                    matrix[pre_doc_idx, pred] = cluster_idx_increase # UPDATE MATRIX
                     matrix[current_doc_idx, current_doc_sentence_idx] = cluster_idx_increase # UPDATE MATRIX
                     assert len(clusters) == cluster_idx_increase
-                    target_item = (pre_doc_idx, pre_doc_sentence_idx, pre_doc['ss'][pre_doc_sentence_idx])
-                    current_item = (current_doc_idx, current_doc_sentence_idx, current_doc['ss'][current_doc_sentence_idx])
+                    target_item = (pre_doc_idx, pred, docs[pre_doc_idx]['ss'][pred])
+                    current_item = (current_doc_idx, current_doc_sentence_idx, docs[current_doc_idx]['ss'][current_doc_sentence_idx])
                     clusters.append([target_item, current_item]) # # UPDATE CLUSTER LIST
                 else: # APPEND
-                    cid_temp = matrix[pre_doc_idx, pre_doc_sentence_idx]
+                    cid_temp = matrix[pre_doc_idx, pred]
                     matrix[current_doc_idx, current_doc_sentence_idx] = cid_temp # UPDATE MATRIX
-                    current_item = (current_doc_idx, current_doc_sentence_idx, current_doc['ss'][current_doc_sentence_idx])
+                    try: 
+                        current_item = (current_doc_idx, current_doc_sentence_idx, docs[current_doc_idx]['ss'][current_doc_sentence_idx])
+                    except IndexError as e:
+                        print(e)
+                        print(f'{current_doc_idx} -> {current_doc_sentence_idx}: {item}')
+                        raise IndexError
                     clusters[cid_temp].append(current_item) # # UPDATE CLUSTER LIST
-            else: # SHIFT
-                pass
     return clusters, matrix
 
 
@@ -158,7 +150,8 @@ def cal_f(cluster_pred, cluster_true):
         rec = (TP / (TP + FN)) if (TP + FN) != 0 else 0
         f = (2 * (prec * rec) / (prec + rec)) if (prec + rec) != 0 else 0
         ress.append((prec, rec, f))
-    return ress
+    mean_f = np.mean([f for prec, rec, f in ress])
+    return ress, mean_f
 
 
 ######################### Calculation ###########################
