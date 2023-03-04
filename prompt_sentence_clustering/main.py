@@ -18,10 +18,13 @@ def dry_run(m, item):
     model = m.bert
     tokenizer = m.toker
     input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+    if len(input_ids[0]) > 512:
+        print(f'LONG INPUT SHOULD BE HANDLE: {prompt}')
+        return -1, y
     with torch.no_grad():
-        logits = model(input_ids = input_ids).logits
+        logits = model(input_ids = input_ids.cuda()).logits
     mask_index = (input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
-    predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
+    predicted_token_id = logits[0, tokenizer.mask_token_id].argmax(axis=-1)
     word = tokenizer.decode(predicted_token_id)
     if word in ['？', '?']:
         return -1, y
@@ -44,17 +47,6 @@ def get_predicted_word(m, prompt):
     word = tokenizer.decode(predicted_token_id)
     return word
 
-
-# m = create_model()
-
-def script(m, epoch = 1):
-    losses = []
-    ds = create_training_data()
-    train_data = ds[:115]
-    test_data = ds[115:]
-    for e in range(epoch):
-        losses += train_one_epoch(m, train_data, cal_loss, m.opter, batch = 4, log_inteval = 4)
-    return losses
 
 ######################## 2023.3.1 #########################
 

@@ -164,7 +164,7 @@ def find_sub_list(l,sl):
 
 def create_prompt_keep_context_size(context, current_sentence, need_limit_input_size = False, focus_idx = 0):
     if (not need_limit_input_size) or focus_idx == -1 or len(context) < 500:
-        prompt = f'{context} | 次の文は[MASK]番の文と似ている: {current_sentence}'
+        prompt = f'{context} | 次の文は([MASK])番目の文と似ている: {current_sentence}'
         return prompt
     else:
         start, _ = find_sub_list(context, f'[{focus_idx}]')
@@ -176,7 +176,7 @@ def create_prompt_keep_context_size(context, current_sentence, need_limit_input_
                 remainder = 200 - start
                 head = 0
                 tail = start + 300 + remainder
-                assert tail < len(context)
+                assert tail <= len(context)
             elif start + 300 >= len(context):
                 remainder = start + 300 - len(context)
                 tail = len(context) - 1
