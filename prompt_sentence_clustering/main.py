@@ -6,9 +6,9 @@ def cal_loss(m, item):
     model = m.bert
     tokenizer = m.toker
     prompt, y = item
-    input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+    input_ids = tokenizer(prompt, return_tensors="pt", truncation = True).input_ids
     label_text = prompt.replace('[MASK]', str(y) if y != -1 else '？')
-    labels = tokenizer(label_text, return_tensors="pt")["input_ids"]
+    labels = tokenizer(label_text, return_tensors="pt", truncation = True)["input_ids"]
     labels = torch.where(input_ids == tokenizer.mask_token_id, labels, -100)
     outputs = model(input_ids = input_ids.cuda(), labels=labels.cuda())
     return outputs.loss
@@ -29,7 +29,7 @@ def dry_run(m, item):
 def get_predicted_word(m, prompt):
     tokenizer = m.toker
     model = m.bert
-    input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+    input_ids = tokenizer(prompt, return_tensors="pt", truncation = True).input_ids
     with torch.no_grad():
         logits = model(input_ids = input_ids.cuda()).logits
     mask_index = (input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]

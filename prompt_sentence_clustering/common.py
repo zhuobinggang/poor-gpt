@@ -20,7 +20,7 @@ def create_model(learning_rate = 1e-5, bert = None):
         res.bert = BertForMaskedLM.from_pretrained('cl-tohoku/bert-base-japanese-whole-word-masking')
     else:
         res.bert = bert
-    res.toker = BertJapaneseTokenizer.from_pretrained('cl-tohoku/bert-base-japanese-whole-word-masking')
+    res.toker = BertJapaneseTokenizer.from_pretrained('cl-tohoku/bert-base-japanese-whole-word-masking', truncation_side= 'left', model_max_length = 512)
     res.opter = torch.optim.AdamW(res.bert.parameters(), learning_rate)
     res.learning_rate = learning_rate
     res.bert.cuda()
