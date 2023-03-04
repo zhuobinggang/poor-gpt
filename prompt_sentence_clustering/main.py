@@ -15,17 +15,7 @@ def cal_loss(m, item):
 
 def dry_run(m, item):
     prompt, y = item
-    model = m.bert
-    tokenizer = m.toker
-    input_ids = tokenizer(prompt, return_tensors="pt").input_ids
-    if len(input_ids[0]) > 512:
-        print(f'LONG INPUT SHOULD BE HANDLE: {prompt}')
-        return -1, y
-    with torch.no_grad():
-        logits = model(input_ids = input_ids.cuda()).logits
-    mask_index = (input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
-    predicted_token_id = logits[0, tokenizer.mask_token_id].argmax(axis=-1)
-    word = tokenizer.decode(predicted_token_id)
+    word = get_predicted_word(m, prompt)
     if word in ['？', '?']:
         return -1, y
     else:
