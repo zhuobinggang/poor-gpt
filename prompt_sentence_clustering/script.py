@@ -10,9 +10,9 @@ def dataset_test(shuffle = False, skip_negative = False):
     train_ds = []
     test_ds = []
     for name in ['goutou', 'smartphone', 'siro']:
-        train_ds += create_training_data(name = name, need_limit_input_size = True)
+        train_ds += create_training_data(name = name)
     for name in ['jisin', 'camera', 'dinasour']:
-        test_ds += create_training_data(name = name, need_limit_input_size = True)
+        test_ds += create_training_data(name = name)
     if shuffle:
         np.random.shuffle(train_ds)
         np.random.shuffle(test_ds)
@@ -51,23 +51,27 @@ def test_skip(m, tds = None, skip = True):
 # Batch Running
 def script(epoch = 20):
     start_time = time.time()
-    _, tds = dataset_test(shuffle = False, skip_negative = True)
+    _, tds = dataset_test(shuffle = False, skip_negative = False)
     # skip_negative
     m = create_model()
     precs_skip = []
     ds, _ = dataset_test(shuffle = True, skip_negative = True)
     for i in range(epoch):
         _ = train_one_epoch(m, ds, cal_loss, m.opter, batch = 4, log_inteval = 16)
-        precs_skip.append(test_skip(m, tds))
-        save_model(m, f'skip_negative_e{i}')
+        dd = round(test_skip(m, tds), 4)
+        print(dd)
+        precs_skip.append(dd)
+        save_model(m, f'skip_negative_e{i}_{dd}')
     # Do not skip negative
     m = create_model()
     precs_no_skip = []
     ds, _ = dataset_test(shuffle = True, skip_negative = False)
     for i in range(epoch):
         _ = train_one_epoch(m, ds, cal_loss, m.opter, batch = 4, log_inteval = 16)
-        precs_no_skip.append(test_skip(m, tds))
-        save_model(m, f'with_negative_e{i}')
+        dd = round(test_skip(m, tds), 4)
+        print(dd)
+        precs_no_skip.append(dd)
+        save_model(m, f'with_negative_e{i}_{dd}')
     print("--- %s seconds ---" % (time.time() - start_time))
     return precs_skip, precs_no_skip
 

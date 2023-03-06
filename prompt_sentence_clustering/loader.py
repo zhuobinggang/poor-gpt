@@ -169,7 +169,8 @@ def find_sub_list(l,sl):
 # Limit sentence length according to the number of sentences
 def create_prompt_keep_context_size(ss, current_sentence, need_limit_input_size = False, MAX_LENGTH = 600):
     context = ''
-    if (not need_limit_input_size) or len(context) < MAX_LENGTH:
+    length_sum = sum([len(s) for s in ss])
+    if (not need_limit_input_size) or length_sum < MAX_LENGTH:
         for idx, s in enumerate(ss):
             context += f' [{idx}] {s} '
     else:
@@ -211,7 +212,8 @@ def create_prompt_keep_context_size_old(context, current_sentence, need_limit_in
             # print(f'CONTEXT TOO LONG WAS CUTTED! LABEL = {focus_idx}, PROMPT: {prompt}')
             return prompt
 
-def create_training_data(name = 'goutou', need_limit_input_size = False, split_by_docs = False):
+def create_training_data(name = 'goutou', split_by_docs = False):
+    need_limit_input_size = True
     ress = []
     docs = load_docs(name)
     cols, ground_truths = read_label(name)

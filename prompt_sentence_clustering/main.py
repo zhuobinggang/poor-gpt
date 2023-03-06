@@ -46,18 +46,18 @@ def inference(m, name):
     matrix = np.full((20, 30), -1, dtype=int) # (docs, sentences), assume the number of sentences will not exceed 20
     clusters = []
     cluster_idx_increase = -1
-    tdss = create_training_data(name = name, need_limit_input_size = True, split_by_docs = True)
+    tdss = create_training_data(name = name, split_by_docs = True)
     for pre_doc_idx, tds in enumerate(tdss):
         current_doc_idx = pre_doc_idx + 1
         # TODO
         for current_doc_sentence_idx, items in enumerate(tds):
-            #if len(items) > 1:
-                #assert items[0][0] == items[1][0]
+            if len(items) > 1:
+                assert items[0][0] == items[1][0]
             item = items[0]
             pred, _ = dry_run(m, item)
             if pred != -1: # LINK or APPEND
                 if pred >= len(docs[pre_doc_idx]['ss']):
-                    print(f'{pred} will out of range!: \n Prompt: {prompt}')
+                    print(f'{pred} will out of range!: \n Prompt: {item}')
                     pred = -1
                 if matrix[pre_doc_idx, pred] == -1: # LINK
                     cluster_idx_increase += 1
