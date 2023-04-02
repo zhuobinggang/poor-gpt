@@ -275,6 +275,9 @@ def distance_classify():
         nn.Linear(16, 2),
         nn.Sigmoid(),
     )
+    model = nn.Sequential(
+        nn.Linear(300, 2),
+    )
     CEL = nn.CrossEntropyLoss()
     opter = optim.AdamW(model.parameters(), lr = 1e-3)
     ds = get_dataset()
@@ -282,6 +285,7 @@ def distance_classify():
     test_ds = ds[177:]
     ds_aug = load_aug_dataset()[:200]
     ds_train_combined = shuffle_with_dataset_aug(ds_aug, train_ds)
+    # ds_train_combined = shuffle_with_dataset_aug([], train_ds)
     # 训练
     loss = []
     prec = []
