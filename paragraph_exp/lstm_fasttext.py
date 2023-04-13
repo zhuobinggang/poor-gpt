@@ -648,8 +648,9 @@ class Sector_Traditional_BiLSTM_All(nn.Module):
         left_index = left_vecs.shape[0] - 1
         right_index = left_vecs.shape[0]
         vecs = torch.cat((left_vecs, right_vecs)) # (?, 300)
-        outs, (_, _) = rnn(vecs.cuda()) # (?, 600)
-        assert len(outs.shape) == 2 
+        outs, (_, _) = rnn(vecs.unsqueeze(0).cuda()) # (1, ?, 600)
+        outs = outs.squeeze()
+        assert len(outs.shape) == 2
         assert outs.shape[1] == 600
         # Attention
         left_vec = outs[left_index] # (600)
