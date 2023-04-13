@@ -9,7 +9,7 @@ def read_docs(data_id = 1):
     filenames = ['kokoro'] 
   elif data_id == 3:
     filenames = ['meian'] 
-  paths = [f'datasets/{name}_new.txt' for name in filenames]
+  paths = [f'data/{name}_new.txt' for name in filenames]
   docs = []
   for path in paths:
     with open(path) as f:

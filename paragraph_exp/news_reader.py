@@ -3,7 +3,7 @@ from importlib import reload
 import re
 import random
 
-the_path = './datasets/mai2019.utf8.txt'
+the_path = 'data/mai2019.utf8.txt'
 
 def read_lines():
   with open(the_path) as fin:
@@ -189,13 +189,13 @@ def customize_my_dataset_and_save(structed_articles):
     dev = one_art_per_line[4500:5000]
     manual_exp = one_art_per_line[5000:5500]
     # valid = one_art_per_line[2000:2500]
-    with open('datasets/train.paragraph.txt', 'w') as the_file:
+    with open('data/train.paragraph.txt', 'w') as the_file:
         the_file.write('\n'.join(train))
-    with open('datasets/test.paragraph.txt', 'w') as the_file:
+    with open('data/test.paragraph.txt', 'w') as the_file:
         the_file.write('\n'.join(test))
-    with open('datasets/dev.paragraph.txt', 'w') as the_file:
+    with open('data/dev.paragraph.txt', 'w') as the_file:
         the_file.write('\n'.join(dev))
-    with open('datasets/manual_exp.paragraph.txt', 'w') as the_file:
+    with open('data/manual_exp.paragraph.txt', 'w') as the_file:
         the_file.write('\n'.join(manual_exp))
 
 def write_additional_test_datasets(structed_articles):
@@ -248,13 +248,13 @@ def customize_my_dataset_and_save_mini(structed_articles):
     test = one_art_per_line[300:450]
     dev = one_art_per_line[450:600]
     valid = one_art_per_line[600:750]
-    with open('datasets/train.paragraph.mini.txt', 'w') as the_file:
+    with open('data/train.paragraph.mini.txt', 'w') as the_file:
         the_file.write('\n'.join(train))
-    with open('datasets/test.paragraph.mini.txt', 'w') as the_file:
+    with open('data/test.paragraph.mini.txt', 'w') as the_file:
         the_file.write('\n'.join(test))
-    with open('datasets/dev.paragraph.mini.txt', 'w') as the_file:
+    with open('data/dev.paragraph.mini.txt', 'w') as the_file:
         the_file.write('\n'.join(dev))
-    with open('datasets/valid.paragraph.mini.txt', 'w') as the_file:
+    with open('data/valid.paragraph.mini.txt', 'w') as the_file:
         the_file.write('\n'.join(valid))
 
 def read_sentences_per_art(path):
@@ -281,7 +281,7 @@ def no_indicator(s):
   return s.replace('\u3000', '')
 
 def read_chapters(file_name = 'train'):
-    arts = read_sentences_per_art(f'datasets/{file_name}.paragraph.txt')
+    arts = read_sentences_per_art(f'data/{file_name}.paragraph.txt')
     arts_without_linebreak = []
     for art in arts:
         art = [line.replace(' ', '').replace('\n', '').replace('\r', '') for line in art]
