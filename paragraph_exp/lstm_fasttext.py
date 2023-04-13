@@ -569,8 +569,8 @@ class Sector_Traditional_BiLSTM_Attention(nn.Module):
         assert len(left_vecs.shape) == 2 
         assert left_vecs.shape[1] == 600
         # Attention
-        left_vecs = self.attention(left_vecs) * left_vecs # (?, 600)
-        right_vecs = self.attention(right_vecs) * right_vecs # (?, 600)
+        left_vecs = model.attention(left_vecs) * left_vecs # (?, 600)
+        right_vecs = model.attention(right_vecs) * right_vecs # (?, 600)
         left_vec = left_vecs.sum(dim = 0) # (600)
         right_vec = right_vecs.sum(dim = 0) # (600)
         vec_cat = torch.cat((left_vec.squeeze(), right_vec.squeeze())) # (1200)
@@ -585,6 +585,87 @@ class Sector_Traditional_BiLSTM_Attention(nn.Module):
 def script():
     # Models
     model = Sector_Traditional_BiLSTM_Attention()
+    # Datasets
+    ld_train = loader.news.train()
+    np.random.seed(10)
+    np.random.shuffle(ld_train)
+    ld_test = loader.news.test()
+    # Train
+    losses = []
+    results = []
+    for e in range(10):
+        cur_loss = 0
+        for idx, (ss, ls) in enumerate(ld_train):
+            if idx % 1000 == 0:
+                print(f'{idx} / {len(ld_train)}')
+            out, tar = model(ss, ls)
+            loss = model.CEL(out, tar)
+            loss.backward()
+            cur_loss += loss.item()
+            if idx % 16 == 0:
+                losses.append(cur_loss / 16)
+                cur_loss = 0
+                model.opter.step()
+                model.opter.zero_grad()
+        model.opter.step()
+        model.opter.zero_grad()
+        # Test
+        preds = []
+        trues = []
+        for idx, (ss, ls) in enumerate(ld_test):
+            out, tar = model(ss, ls)
+            preds.append(out.argmax().item())
+            trues.append(ls[2])
+        result = cal_prec_rec_f1_v2(preds, trues)
+        results.append(result)
+        print(result)
+        # Plot loss
+        draw_line_chart(range(len(losses)), [losses], ['loss'])
+
+# =============== 双方向 + 全注意 ==================
+
+# 双方向 & Attention
+class Sector_Traditional_BiLSTM_All(nn.Module):
+    def __init__(self, learning_rate = 1e-3):
+        super().__init__()
+        self.ft = fasttext.load_model('cc.ja.300.bin')
+        self.rnn = nn.LSTM(300, 300, 1, batch_first = True, bidirectional = True).cuda()
+        self.mlp = nn.Sequential(
+            nn.Linear(1200, 2),
+        ).cuda()
+        self.CEL = nn.CrossEntropyLoss()
+        self.opter = optim.AdamW(chain(self.rnn.parameters(), self.mlp.parameters()), lr = learning_rate)
+        self.tagger = Tagger('-Owakati')
+    def forward(model, ss, ls):
+        rnn = model.rnn
+        mlp = model.mlp
+        tagger = model.tagger
+        ft = model.ft
+        left = combine_ss(ss[:2])
+        right = combine_ss(ss[2:])
+        left_vecs = torch.stack([torch.from_numpy(ft.get_word_vector(str(word))) for word in tagger(left)]) # (?, 300)
+        right_vecs = torch.stack([torch.from_numpy(ft.get_word_vector(str(word))) for word in tagger(right)]) # (?, 300)
+        left_index = left_vecs.shape[0] - 1
+        right_index = left_vecs.shape[0]
+        vecs = torch.cat((left_vecs, right_vecs)) # (?, 300)
+        outs, (_, _) = rnn(vecs.cuda()) # (?, 600)
+        assert len(outs.shape) == 2 
+        assert outs.shape[1] == 600
+        # Attention
+        left_vec = outs[left_index] # (600)
+        right_vec = outs[right_index] # (600)
+        vec_cat = torch.cat((left_vec.squeeze(), right_vec.squeeze())) # (1200)
+        out = mlp(vec_cat).unsqueeze(0) # (1, 2)
+        # loss & step
+        tar = torch.LongTensor([ls[2]]).cuda() # (1)
+        return out, tar
+
+# 使用fugashi分词，然后使用fasttext获取emb，然后LSTM结合特征，最后MLP输出结果
+# NOTE: 双方向 & attention
+# 正式测试
+def script():
+    # Models
+    model = Sector_Traditional_BiLSTM_All()
     # Datasets
     ld_train = loader.news.train()
     np.random.seed(10)
