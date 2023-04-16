@@ -3,6 +3,7 @@ import fasttext
 import torch
 from torch import nn
 from torch import optim
+from torch.utils.data import Sampler, Dataset
 import numpy as np
 from chart import draw_line_chart
 from fugashi import Tagger
@@ -538,6 +539,21 @@ def script():
 
 
 # =============== 双方向 + attention ==================
+def save_checkpoint(name, model, epoch, val_prec):
+    PATH = f'checkpoint/{name}.checkpoint'
+    torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'val_prec': val_prec,
+            }, PATH)
+
+def load_checkpoint(PATH):
+    model = Sector_Traditional_BiLSTM_Attention()
+    checkpoint = torch.load(PATH)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    epoch = checkpoint['epoch']
+    val_prec = checkpoint['val_prec']
+    return model
 
 # 双方向 & Attention
 class Sector_Traditional_BiLSTM_Attention(nn.Module):
@@ -556,8 +572,14 @@ class Sector_Traditional_BiLSTM_Attention(nn.Module):
         self.opter = optim.AdamW(chain(self.rnn.parameters(), self.mlp.parameters(), self.attention.parameters()), lr = learning_rate)
         self.tagger = Tagger('-Owakati')
     def forward(model, ss, ls):
-        rnn = model.rnn
         mlp = model.mlp
+        vec_cat = model.get_pooled_output(ss, ls) # (1200)
+        out = mlp(vec_cat).unsqueeze(0) # (1, 2)
+        # loss & step
+        tar = torch.LongTensor([ls[2]]).cuda() # (1)
+        return out, tar
+    def get_pooled_output(model, ss, ls):
+        rnn = model.rnn
         tagger = model.tagger
         ft = model.ft
         left = combine_ss(ss[:2])
@@ -574,22 +596,19 @@ class Sector_Traditional_BiLSTM_Attention(nn.Module):
         left_vec = left_vecs.sum(dim = 0) # (600)
         right_vec = right_vecs.sum(dim = 0) # (600)
         vec_cat = torch.cat((left_vec.squeeze(), right_vec.squeeze())) # (1200)
-        out = mlp(vec_cat).unsqueeze(0) # (1, 2)
-        # loss & step
-        tar = torch.LongTensor([ls[2]]).cuda() # (1)
-        return out, tar
+        return vec_cat
 
 # 使用fugashi分词，然后使用fasttext获取emb，然后LSTM结合特征，最后MLP输出结果
 # NOTE: 双方向 & attention
 # 正式测试
-def script():
+def script_attention():
     # Models
     model = Sector_Traditional_BiLSTM_Attention()
     # Datasets
     ld_train = loader.news.train()
     np.random.seed(10)
     np.random.shuffle(ld_train)
-    ld_test = loader.news.test()
+    ld_dev = loader.news.dev()
     # Train
     losses = []
     results = []
@@ -612,7 +631,7 @@ def script():
         # Test
         preds = []
         trues = []
-        for idx, (ss, ls) in enumerate(ld_test):
+        for idx, (ss, ls) in enumerate(ld_dev):
             out, tar = model(ss, ls)
             preds.append(out.argmax().item())
             trues.append(ls[2])
@@ -621,6 +640,8 @@ def script():
         print(result)
         # Plot loss
         draw_line_chart(range(len(losses)), [losses], ['loss'])
+        # save
+        save_checkpoint(f'att_e{e+1}_f{round(result[2], 3)}', model, e, result)
 
 # =============== 双方向 + 全注意 ==================
 
@@ -661,6 +682,9 @@ class Sector_Traditional_BiLSTM_All(nn.Module):
         tar = torch.LongTensor([ls[2]]).cuda() # (1)
         return out, tar
 
+
+	
+
 # 使用fugashi分词，然后使用fasttext获取emb，然后LSTM结合特征，最后MLP输出结果
 # NOTE: 双方向 & attention
 # 正式测试
@@ -671,7 +695,7 @@ def script():
     ld_train = loader.news.train()
     np.random.seed(10)
     np.random.shuffle(ld_train)
-    ld_test = loader.news.test()
+    ld_dev = loader.news.test()
     # Train
     losses = []
     results = []
@@ -691,10 +715,10 @@ def script():
                 model.opter.zero_grad()
         model.opter.step()
         model.opter.zero_grad()
-        # Test
+        # validate
         preds = []
         trues = []
-        for idx, (ss, ls) in enumerate(ld_test):
+        for idx, (ss, ls) in enumerate(ld_dev):
             out, tar = model(ss, ls)
             preds.append(out.argmax().item())
             trues.append(ls[2])
@@ -703,3 +727,5 @@ def script():
         print(result)
         # Plot loss
         draw_line_chart(range(len(losses)), [losses], ['loss'])
+
+

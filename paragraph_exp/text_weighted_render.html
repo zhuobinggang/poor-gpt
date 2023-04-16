@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Text Weighted Render</title>
+<style>
+.inline{
+    display: inline;
+    margin-right: 10px;
+}
+
+</style>
+</head>
+ 
+<body>
+        <div id='slot'></div>
+</body>
+
+
+<script>
+// k = 0.3
+k = 0.1
+
+function generate_v2(tokens, atts, labels = [-1, -1, -1, -1], desc_text = ''){
+        console.assert(tokens.length == atts.length)
+        let container = document.createElement('div')
+        container.style.marginTop = '50px'
+        let sep_count = 0
+        let over_size_count = 0
+        let paragraph = document.createElement('div')
+        for (let i = 0; i < tokens.length; i++){
+                text = tokens[i]
+                
+                att = atts[i]
+                degree = att * tokens.length
+                if(degree > 1){
+                        over_size_count += 1
+                }
+                // opacity = degree * 0.17 + 0.34
+                opacity = degree * k
+                if (opacity < 0.1){
+                    opacity = 0
+                }
+                // create div
+                let div = document.createElement('div');
+                div.innerHTML = text;
+                div.className = 'inline';
+                div.style.backgroundColor = `rgba(255, 87, 51, ${opacity})`
+                paragraph.appendChild(div)
+                if (text == '[SEP]'){
+                        sep_count += 1
+                        if (labels[sep_count] == -1){
+                            // Do Nothing
+                        }else if (labels[sep_count] == 1){
+                            container.appendChild(paragraph)
+                            paragraph = document.createElement('div')
+                        }else{
+                            // Do Nothing
+                        }
+                }
+        }
+        container.appendChild(paragraph)
+        // Create Description
+        let desc = document.createElement('div');
+        // let percent = (over_size_count / tokens.length) * 100
+        // desc.innerHTML = `significant tokens percent:  ${percent}%`;
+        desc.innerHTML = `${desc_text}`;
+        container.appendChild(desc)
+        // Append Container to Slot
+        slot = document.getElementById('slot')
+        slot.appendChild(container)
+}
+
+function generate(tokens, atts, labels = [-1, -1, -1, -1], replace_sep = true){
+        console.assert(tokens.length == atts.length)
+        let container = document.createElement('div')
+        container.style.marginTop = '50px'
+        let sep_count = 0
+        let over_size_count = 0
+        for (let i = 0; i < tokens.length; i++){
+                text = tokens[i]
+                
+                att = atts[i]
+                degree = att * tokens.length
+                if(degree > 1){
+                        over_size_count += 1
+                }
+                // opacity = degree * 0.17 + 0.34
+                opacity = degree * k
+                // create div
+                let div = document.createElement('div');
+                div.innerHTML = text;
+                div.className = 'inline';
+                div.style.backgroundColor = `rgba(255, 87, 51, ${opacity})`
+                if (text == '[ S E P ]' && replace_sep){
+                        sep_count += 1
+                        if (labels[sep_count] == -1){
+                            // Do Nothing
+                        }else if (labels[sep_count] == 1){
+                            div.innerHTML = '[SEP(分割)]'
+                        }else{
+                            div.innerHTML = '[SEP]'
+                        }
+                }
+                container.appendChild(div)
+        }
+        // Create Description
+        let desc = document.createElement('div');
+        let percent = (over_size_count / tokens.length) * 100
+        desc.innerHTML = `significant tokens percent:  ${percent}%`;
+        container.appendChild(desc)
+        // Append Container to Slot
+        slot = document.getElementById('slot')
+        slot.appendChild(container)
+}
+
+function empty(){
+        slot = document.getElementById('slot-1')
+        slot.innerHTML = ''
+        slot = document.getElementById('slot-1')
+        slot.innerHTML = ''
+}
+
+</script>
+ 
+</html>
