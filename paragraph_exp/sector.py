@@ -32,7 +32,6 @@ class Sector(nn.Module):
     def init_hook(self):
         self.classifier = nn.Sequential(  # 因为要同时判断多种1[sep]3, 2[sep]2, 3[sep]1, 所以多加一点复杂度
             nn.Linear(self.bert_size, 2),
-            nn.Softmax(dim=0),
         )
     def forward(m, ss, ls):
         cls = m.get_pooled_output(ss, ls) # (768)
@@ -47,6 +46,16 @@ class Sector(nn.Module):
     def loss(self, logits, targets):
         return self.CEL(logits, targets)
 
+class Sector_FL(Sector):
+    def __init__(self, FL_RATE, lr=2e-5):
+        super().__init__(lr)
+        self.FL_RATE = FL_RATE
+    def loss(self, logits, targets): # (1, 2), (1)
+        probs = torch.softmax(logits.squeeze(), 0) # (2)
+        y = targets.item()
+        pt = probs[1] if y == 1 else probs[0]
+        loss = (-1) * torch.log(pt) * torch.pow(1 - pt, self.FL_RATE)
+        return loss
 
 # 单个SEP
 # NOTE: 处理None

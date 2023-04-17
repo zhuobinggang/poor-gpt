@@ -8,19 +8,7 @@ import numpy as np
 from chart import draw_line_chart
 from fugashi import Tagger
 from itertools import chain
-
-# 使用fasttext来整段落分割
-def get_wordvec_script(word):
-    ft = fasttext.load_model('cc.ja.300.bin')
-    ft.get_word_vector(word)
-
-def combine_ss(ss):
-    res = ''
-    for s in ss:
-        if s is not None:
-            res += s
-    return res
-
+from common import combine_ss
 
 def script():
     ft = fasttext.load_model('cc.ja.300.bin')

@@ -122,3 +122,12 @@ def train_save_eval_plot(model, save_name, batch_size = 32, check_step = 500, to
             save_checkpoint(f'checkpoint/{save_name}_step{step + 1}_f{round(result_dev[2], 3)}.checkpoint', model, step+1, {'dev': result_dev, 'test': result_test})
             # Plot
             loser.plot(f'checkpoint/{save_name}_step{step + 1}.png')
+
+
+################## Fasttext ###################
+def combine_ss(ss):
+    res = ''
+    for s in ss:
+        if s is not None:
+            res += s
+    return res
