@@ -97,14 +97,14 @@ class ModelWrapper():
 
 
 # model: ModelWrapper
-def train_save_eval_plot(model, save_name, batch_size = 32, check_step = 500):
+def train_save_eval_plot(model, save_name, batch_size = 32, check_step = 500, total_step = 5000):
     # Datasets
     ld_train = Infinite_Dataset(loader.news.train(), shuffle_seed = 10)
     ld_dev = loader.news.dev()
     ld_test = loader.news.test()
     # Train
     loser = Loss_Plotter()
-    for step in range(5000):
+    for step in range(total_step):
         batch_loss = []
         for i in range(batch_size):
             ss, ls = ld_train.next()
