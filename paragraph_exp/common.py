@@ -124,6 +124,9 @@ def train_save_eval_plot(model, save_name, batch_size = 32, check_step = 500, to
             loser.plot(f'checkpoint/{save_name}_step{step + 1}.png')
 
 
+def parameters(model):
+    return sum(p.numel() for p in model.parameters())
+
 ################## Fasttext ###################
 def combine_ss(ss):
     res = ''
