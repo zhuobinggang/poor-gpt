@@ -8,7 +8,7 @@ import numpy as np
 from chart import draw_line_chart
 from fugashi import Tagger
 from itertools import chain
-from common import combine_ss
+from common import combine_ss, ModelWrapper, train_save_eval_plot, parameters
 
 def script():
     ft = fasttext.load_model('cc.ja.300.bin')
@@ -543,48 +543,7 @@ def load_checkpoint(PATH):
     val_prec = checkpoint['val_prec']
     return model
 
-# 双方向 & Attention
-class Sector_Traditional_BiLSTM_Attention(nn.Module):
-    def __init__(self, learning_rate = 1e-3):
-        super().__init__()
-        self.ft = fasttext.load_model('cc.ja.300.bin')
-        self.rnn = nn.LSTM(300, 300, 1, batch_first = True, bidirectional = True).cuda()
-        self.attention = nn.Sequential(
-            nn.Linear(600, 1),
-            nn.Softmax(dim = 0),
-        ).cuda()
-        self.mlp = nn.Sequential(
-            nn.Linear(1200, 2),
-        ).cuda()
-        self.CEL = nn.CrossEntropyLoss()
-        self.opter = optim.AdamW(chain(self.rnn.parameters(), self.mlp.parameters(), self.attention.parameters()), lr = learning_rate)
-        self.tagger = Tagger('-Owakati')
-    def forward(model, ss, ls):
-        mlp = model.mlp
-        vec_cat = model.get_pooled_output(ss, ls) # (1200)
-        out = mlp(vec_cat).unsqueeze(0) # (1, 2)
-        # loss & step
-        tar = torch.LongTensor([ls[2]]).cuda() # (1)
-        return out, tar
-    def get_pooled_output(model, ss, ls):
-        rnn = model.rnn
-        tagger = model.tagger
-        ft = model.ft
-        left = combine_ss(ss[:2])
-        right = combine_ss(ss[2:])
-        left_vecs = torch.stack([torch.from_numpy(ft.get_word_vector(str(word))) for word in tagger(left)]) # (?, 300)
-        right_vecs = torch.stack([torch.from_numpy(ft.get_word_vector(str(word))) for word in tagger(right)]) # (?, 300)
-        left_vecs, (_, _) = rnn(left_vecs.cuda()) # (?, 600)
-        right_vecs, (_, _) = rnn(right_vecs.cuda()) # (?, 600)
-        assert len(left_vecs.shape) == 2 
-        assert left_vecs.shape[1] == 600
-        # Attention
-        left_vecs = model.attention(left_vecs) * left_vecs # (?, 600)
-        right_vecs = model.attention(right_vecs) * right_vecs # (?, 600)
-        left_vec = left_vecs.sum(dim = 0) # (600)
-        right_vec = right_vecs.sum(dim = 0) # (600)
-        vec_cat = torch.cat((left_vec.squeeze(), right_vec.squeeze())) # (1200)
-        return vec_cat
+
 
 # 使用fugashi分词，然后使用fasttext获取emb，然后LSTM结合特征，最后MLP输出结果
 # NOTE: 双方向 & attention
@@ -716,4 +675,109 @@ def script():
         # Plot loss
         draw_line_chart(range(len(losses)), [losses], ['loss'])
 
+
+############## 降低学习率重新实验: 比较LSTM和Attention的性能
+class Adapter(nn.Module):
+    def __init__(self, in_channel, hidden_channen):
+        super().__init__()
+        self.down = nn.Linear(in_channel, hidden_channen)
+        self.gelu = nn.GELU()
+        self.up = nn.Linear(hidden_channen, in_channel)
+    def forward(self, x):
+        h = self.down(x) 
+        h = self.gelu(h)
+        h = self.up(h)
+        return x + h
+
+# 双方向 & Attention
+class BILSTM_ATT_MEAN(nn.Module):
+    def __init__(self, learning_rate = 1e-4):
+        super().__init__()
+        self.ft = fasttext.load_model('cc.ja.300.bin')
+        self.tagger = Tagger('-Owakati')
+        self.rnn = nn.LSTM(300, 300, 1, batch_first = True, bidirectional = True)
+        self.attention = nn.Sequential(
+            nn.Linear(600, 1),
+            nn.Softmax(dim = 0),
+        )
+        self.mlp = nn.Sequential(
+            nn.Linear(1200, 2),
+        )
+        self.adapter = Adapter(600, 100)
+        self.CEL = nn.CrossEntropyLoss()
+        self.cuda()
+        self.opter = optim.AdamW(chain(self.parameters()), lr = learning_rate)
+    def forward(model, ss, ls):
+        mlp = model.mlp
+        vec_cat = model.get_pooled_output(ss, ls) # (1200)
+        out = mlp(vec_cat).unsqueeze(0) # (1, 2)
+        # loss & step
+        tar = torch.LongTensor([ls[2]]).cuda() # (1)
+        return out, tar
+    def loss(model, out ,tar):
+        return model.CEL(out, tar)
+    def create_vecs(self, text):
+        vecs = torch.stack([torch.from_numpy(self.ft.get_word_vector(str(word))) for word in self.tagger(text)]) # (?, 300)
+        vecs, (_, _) = self.rnn(vecs.cuda()) # (?, 600)
+        # NOTE: ATT
+        vecs = self.attention(vecs) * self.adapter(vecs)
+        return vecs
+    def get_pooled_output(self, ss, ls):
+        left_vecs = self.create_vecs(combine_ss(ss[:2]))
+        right_vecs = self.create_vecs(combine_ss(ss[2:]))
+        assert len(left_vecs.shape) == 2 
+        assert left_vecs.shape[1] == 600
+        # Mean
+        left_vec = left_vecs.mean(dim = 0) # (600)
+        right_vec = right_vecs.mean(dim = 0) # (600)
+        vec_cat = torch.cat((left_vec.squeeze(), right_vec.squeeze())) # (1200)
+        return vec_cat
+
+def script():
+    model = ModelWrapper(BILSTM_ATT_MEAN())
+    train_save_eval_plot(model, 'BILSTM_ATT_MEAN', batch_size = 32, check_step = 1000, total_step = 50000)
+
+# 不要Adapter?
+class BILSTM_ATT_MEAN2(nn.Module):
+    def __init__(self, learning_rate = 1e-4):
+        super().__init__()
+        self.ft = fasttext.load_model('cc.ja.300.bin')
+        self.tagger = Tagger('-Owakati')
+        self.rnn = nn.LSTM(300, 300, 1, batch_first = True, bidirectional = True)
+        self.attention = nn.Sequential(
+            nn.Linear(600, 1),
+            nn.Softmax(dim = 0),
+        )
+        self.mlp = nn.Sequential(
+            nn.Linear(1200, 2),
+        )
+        self.adapter = Adapter(600, 100)
+        self.CEL = nn.CrossEntropyLoss()
+        self.cuda()
+        self.opter = optim.AdamW(chain(self.parameters()), lr = learning_rate)
+    def forward(model, ss, ls):
+        mlp = model.mlp
+        vec_cat = model.get_pooled_output(ss, ls) # (1200)
+        out = mlp(vec_cat).unsqueeze(0) # (1, 2)
+        # loss & step
+        tar = torch.LongTensor([ls[2]]).cuda() # (1)
+        return out, tar
+    def loss(model, out ,tar):
+        return model.CEL(out, tar)
+    def create_vecs(self, text):
+        vecs = torch.stack([torch.from_numpy(self.ft.get_word_vector(str(word))) for word in self.tagger(text)]) # (?, 300)
+        vecs, (_, _) = self.rnn(vecs.cuda()) # (?, 600)
+        # NOTE: ATT
+        vecs = self.attention(vecs) * vecs
+        return vecs
+    def get_pooled_output(self, ss, ls):
+        left_vecs = self.create_vecs(combine_ss(ss[:2]))
+        right_vecs = self.create_vecs(combine_ss(ss[2:]))
+        assert len(left_vecs.shape) == 2 
+        assert left_vecs.shape[1] == 600
+        # Mean
+        left_vec = left_vecs.mean(dim = 0) # (600)
+        right_vec = right_vecs.mean(dim = 0) # (600)
+        vec_cat = torch.cat((left_vec.squeeze(), right_vec.squeeze())) # (1200)
+        return vec_cat
 

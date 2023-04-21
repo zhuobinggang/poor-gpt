@@ -134,3 +134,9 @@ def combine_ss(ss):
         if s is not None:
             res += s
     return res
+
+############### 梯度消失确认
+def check_gradient(m):
+    print(m.self_attn.out_proj.weight.grad)
+
+
