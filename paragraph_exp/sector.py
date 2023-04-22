@@ -168,3 +168,27 @@ def script():
         save_checkpoint(f'bert_e{e+1}_f{round(result_dev[2], 3)}', model, e, result_dev)
 
 
+############# 注入测试 ##############
+
+class Test():
+    def forward(self, a, b):
+        print(a)
+        print(b)
+
+def inject_forward(self, a, b):
+    print('注入')
+    print(b)
+    print(a)
+
+def test():
+    m = Test()
+    m.forward('a', 'b')
+    def closure(*args):
+        return inject_forward(m, *args)
+    m.forward = closure
+    m.forward('a', 'b')
+
+
+
+
+

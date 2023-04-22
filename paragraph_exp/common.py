@@ -140,3 +140,10 @@ def check_gradient(m):
     print(m.self_attn.out_proj.weight.grad)
 
 
+############## Freeze
+def freeze(model):
+    for param in model.parameters():
+        param.requires_grad = False
+
+
+
