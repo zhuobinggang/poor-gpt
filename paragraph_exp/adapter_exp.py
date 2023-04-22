@@ -44,6 +44,7 @@ def c2(output, adapter, idx):
 
 class Sector_Adapter(Sector):
     def get_should_update(self):
+        freeze(self) # 冻结参数
         adapters = []
         for idx, layer in enumerate(self.bert.encoder.layer):
             print(f'Initing {idx} layer adapter')
@@ -58,6 +59,9 @@ class Sector_Adapter(Sector):
             adapters.append(adapter2)
             output.forward = c2(output, adapter2, idx)
         self.adapters = nn.ModuleList(adapters)
+        # 解冻adapters
+        for param in self.adapters.parameters():
+            param.requires_grad = True
         return chain(self.adapters.parameters())
 
 def script():
@@ -75,4 +79,8 @@ def script():
 def check_grad(adapter):
     return adapter.down.weight.grad
 
+
+def script():
+    m = ModelWrapper(Sector_Adapter(lr = 1e-4))
+    train_save_eval_plot(m, 'Sector_Adapter', batch_size = 32, check_step = 500, total_step = 20000)
 

@@ -146,4 +146,11 @@ def freeze(model):
         param.requires_grad = False
 
 
+############# 确认梯度
+def check_grad(model):
+    for name, param in model.named_parameters():
+        if param.grad is not None:
+            print(name, param.grad.sum())
+        else:
+            print(name, param.grad)
 
