@@ -438,10 +438,10 @@ class Adapter_Only(nn.Module):
 
 ################## AttentionLayer ###############
 class Attention_Model(nn.Module):
-    def __init__(self, learning_rate = 1e-4, layer = 1, head = 3, dropout = 0.1):
+    def __init__(self, learning_rate = 1e-4, layer = 1, head = 3, dropout = 0.1, dim_feedforward = 50):
         super().__init__()
         self.ft = fasttext.load_model('cc.ja.300.bin')
-        encoder_layer = nn.TransformerEncoderLayer(d_model=300, nhead=head, dim_feedforward = 50, batch_first = True, dropout = dropout).cuda()
+        encoder_layer = nn.TransformerEncoderLayer(d_model=300, nhead=head, dim_feedforward = dim_feedforward, batch_first = True, dropout = dropout).cuda()
         self.att = nn.TransformerEncoder(encoder_layer, num_layers=layer)
         self.classifier = nn.Sequential(nn.Linear(600, 2)).cuda()
         self.CEL = nn.CrossEntropyLoss()
@@ -520,5 +520,12 @@ def script():
     out = m(inp) # (1, 2)
     tar = torch.LongTensor([1]) # (1)
     loss = CEL(out, tar)
+
+
+
+# 6头3层，100 dim试试有多少para
+def script():
+    model = ModelWrapper(Attention_Model_Mean(layer = 3, head = 6, dropout = 0, dim_feedforward = 100))
+    train_save_eval_plot(model, 'ATT_6X6_NODROP', batch_size = 32, check_step = 1000, total_step = 50000)
 
 

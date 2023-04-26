@@ -48,8 +48,7 @@ class Sector_Adapter(Sector):
     def __init__(self, hidden_channel = 8, lr=1e-3):
         self.hidden_channel = hidden_channel
         super().__init__(lr)
-    def init_hook(self):
-        freeze(self.bert)
+    def init_adapters(self):
         adapters = []
         for idx, layer in enumerate(self.bert.encoder.layer):
             print(f'Initing {idx} layer adapter')
@@ -67,19 +66,32 @@ class Sector_Adapter(Sector):
             adapters.append(adapter2)
             layer.output.forward = closure_create(layer.output, adapter2, inject_output_FFW)
         self.adapters = nn.ModuleList(adapters)
+    def init_classfier(self):
         self.classifier = nn.Sequential(
             # Adapter(self.bert_size, self.hidden_channel),
             nn.Linear(self.bert_size, 2),
         )
+    def init_hook(self):
+        freeze(self.bert)
+        self.init_adapters()
+        self.init_classfier()
+    def get_should_update(self):
+        print('Sector_Adapter ONLY UPDATE ADAPTERS & CLASSIFIER')
         # 解冻adapters + classifier
         for param in chain(self.adapters.parameters(), self.classifier.parameters()):
             param.requires_grad = True
-    def get_should_update(self):
-        print('Sector_Adapter ONLY UPDATE ADAPTERS & CLASSIFIER')
         return chain(self.adapters.parameters(), self.classifier.parameters())
     def reset_opter(self, lr):
         self.lr = lr
         self.opter = t.optim.AdamW(self.get_should_update(), lr)
+
+
+class Sector_Adapter_Fulltune(Sector_Adapter):
+    def get_should_update(self):
+        print('Sector_Adapter_Fulltune UPDATE BERT, ADAPTERS, CLASSIFIER')
+        for param in chain(self.bert.parameters(), self.adapters.parameters(), self.classifier.parameters()):
+            param.requires_grad = True
+        return chain(self.bert.parameters(), self.adapters.parameters(), self.classifier.parameters())
 
 def script():
     m = Sector_Adapter()
@@ -91,6 +103,6 @@ def script():
     check_gradient(m)
 
 def script():
-    m = ModelWrapper(Sector_Adapter(lr = 1e-4))
-    train_save_eval_plot(m, 'Sector_Adapter_LinearNorm', batch_size = 32, check_step = 500, total_step = 20000)
+    m = ModelWrapper(Sector_Adapter_Fulltune(lr = 2e-5))
+    train_save_eval_plot(m, 'Sector_Adapter_Fulltune', batch_size = 32, check_step = 500, total_step = 10000)
 

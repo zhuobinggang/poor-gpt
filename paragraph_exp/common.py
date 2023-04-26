@@ -95,6 +95,10 @@ class ModelWrapper():
         self.m.opter.step()
         self.m.opter.zero_grad()
 
+def beutiful_print_result(step, dev_res, test_res):
+    dev_prec, dev_rec, dev_f, _ = dev_res
+    test_prec, test_rec, test_f, _ = test_res
+    print(f'STEP: {step + 1}\nDEV: {round(dev_f, 5)}\nTEST: {round(test_f, 5)}\n\n')
 
 # model: ModelWrapper
 def train_save_eval_plot(model, save_name, batch_size = 32, check_step = 500, total_step = 5000):
@@ -117,11 +121,12 @@ def train_save_eval_plot(model, save_name, batch_size = 32, check_step = 500, to
         if (step + 1) % check_step == 0: # Evalue
             result_dev = get_test_result(model, ld_dev)
             result_test = get_test_result(model, ld_test)
-            print(f'STEP: {step + 1}\t{result_dev}\t{result_test}')
+            beutiful_print_result(step, result_dev, result_test)
             # Save
             save_checkpoint(f'checkpoint/{save_name}_step{step + 1}_f{round(result_dev[2], 3)}.checkpoint', model, step+1, {'dev': result_dev, 'test': result_test})
             # Plot
-            loser.plot(f'checkpoint/{save_name}_step{step + 1}.png')
+            # loser.plot(f'checkpoint/{save_name}_step{step + 1}.png')
+            loser.plot(f'checkpoint/{save_name}.png')
 
 
 def parameters(model):

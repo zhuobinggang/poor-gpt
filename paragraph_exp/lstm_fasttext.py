@@ -733,6 +733,7 @@ class BILSTM_ATT_MEAN(nn.Module):
         vec_cat = torch.cat((left_vec.squeeze(), right_vec.squeeze())) # (1200)
         return vec_cat
 
+
 def script():
     model = ModelWrapper(BILSTM_ATT_MEAN())
     train_save_eval_plot(model, 'BILSTM_ATT_MEAN', batch_size = 32, check_step = 1000, total_step = 50000)
@@ -780,4 +781,25 @@ class BILSTM_ATT_MEAN2(nn.Module):
         right_vec = right_vecs.mean(dim = 0) # (600)
         vec_cat = torch.cat((left_vec.squeeze(), right_vec.squeeze())) # (1200)
         return vec_cat
+
+
+# NOTE: NO Attention
+class BILSTM_MEAN(BILSTM_ATT_MEAN): 
+    def create_vecs(self, text):
+        vecs = torch.stack([torch.from_numpy(self.ft.get_word_vector(str(word))) for word in self.tagger(text)]) # (?, 300)
+        vecs, (_, _) = self.rnn(vecs.cuda()) # (?, 600)
+        return vecs
+
+def script():
+    # check att
+    model = ModelWrapper(BILSTM_MEAN())
+    m = model.m
+    ld = loader.news.train()
+    ss, ls = ld[99]
+    out, tar = m(ss,ls)
+    loss = m.loss(out, tar)
+    loss.backward()
+    check_gradient(m)
+    train_save_eval_plot(model, 'BILSTM_MEAN', batch_size = 32, check_step = 1000, total_step = 50000)
+
 
