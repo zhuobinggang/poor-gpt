@@ -86,6 +86,15 @@ class Sector_Adapter(Sector):
         self.opter = t.optim.AdamW(self.get_should_update(), lr)
 
 
+def unfreeze_and_tune_bert(self, lr = 2e-5):
+    print('UNFREEZE BERT AND FINETUNE')
+    freeze(self)
+    # 解冻BERT
+    for param in self.bert.parameters():
+        param.requires_grad = True
+    self.opter = t.optim.AdamW(self.bert.parameters(), lr)
+
+
 class Sector_Adapter_Fulltune(Sector_Adapter):
     def get_should_update(self):
         print('Sector_Adapter_Fulltune UPDATE BERT, ADAPTERS, CLASSIFIER')
@@ -105,4 +114,12 @@ def script():
 def script():
     m = ModelWrapper(Sector_Adapter_Fulltune(lr = 2e-5))
     train_save_eval_plot(m, 'Sector_Adapter_Fulltune', batch_size = 32, check_step = 500, total_step = 10000)
+
+# 阶段性解冻BERT，需要更小心
+def script():
+    m = Sector_Adapter()
+    checkpoint = torch.load(PATH)
+    m.load_state_dict(checkpoint['model_state_dict'])
+    unfreeze_and_tune_bert(m, lr = 2e-5)
+    train_save_eval_plot(ModelWrapper(m), 'Unfreeze_Bert', batch_size = 32, check_step = 100, total_step = 1000)
 
