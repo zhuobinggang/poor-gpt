@@ -79,6 +79,13 @@ def step_random(x, edge_matrix):
     res[i] = 1 if count > 0 else -1
     return res, res[i] != x[i]
 
+def step_random_batch(x, edge_matrix, batch = 100):
+    res = x.copy()
+    for i in np.random.choice(range(edge_matrix.shape[0]), batch):
+        count = sum([(edge_matrix[j, i] * x[j] if i != j else 0) for j in range(len(x))])
+        res[i] = 1 if count > 0 else -1
+    return res
+
 def run2():
     X = np.array([[1,1,1,1, 1,1,1,1, -1,-1,-1,-1, -1,-1,-1,-1],
               [1,1,1,1, -1,-1,-1,-1, 1,1,1,1, -1,-1,-1,-1],

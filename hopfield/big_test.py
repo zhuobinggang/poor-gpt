@@ -30,4 +30,17 @@ def run3():
             ene = energy(x, matrix)
             show(x, n = 64, name = f'dd{i}', info = f'energy = {ene}')
 
+def run4():
+    img = get_img()
+    proto = img.reshape(-1)
+    matrix = init_network(proto)
+    # GO
+    x = random_X(len(proto))
+    ene_old = energy(x, matrix)
+    show(x, n = 64, name = 'dd', info = f'energy = {ene_old}')
+    for i in range(100):
+        x = step_random_batch(x, matrix, 100)
+        ene = energy(x, matrix)
+        show(x, n = 64, name = f'dd{i}', info = f'energy = {ene}')
+
 
