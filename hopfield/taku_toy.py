@@ -42,7 +42,7 @@ def step(X, edge_matrix):
 def show(X, n = 4, name = 'dd', info = ''):
     plt.clf()
     plt.imshow(X.reshape(n,n))
-    plt.colorbar()
+    # plt.colorbar()
     plt.xlabel(info)
     plt.savefig(f'{name}.png')
 
@@ -74,7 +74,7 @@ def run():
         
 def step_random(x, edge_matrix):
     res = x.copy()
-    i = np.random.randint(16)
+    i = np.random.randint(edge_matrix.shape[0])
     count = sum([(edge_matrix[j, i] * x[j] if i != j else 0) for j in range(len(x))])
     res[i] = 1 if count > 0 else -1
     return res, res[i] != x[i]
